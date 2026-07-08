@@ -1,0 +1,26 @@
+[
+  {
+    "tag": "agent0/value_loss",
+    "scalars": {
+      "agent0/value_loss": 0.5581112980842591
+    },
+    "step": 25
+  },
+  {
+    "tag": "agent0/policy_loss",
+    "scalars": {
+      "agent0/policy_loss": 0.10994376391172409
+    },
+    "step": 25
+  },
+  {
+    "tag": "agent0/dist_entropy",
+    "scalars": {
+      "agent0/dist_entropy": 1.449024256070455
+    },
+    "step": 25
+  },
+  {
+    "tag": "agent0/actor_grad_norm",
+    "scalars": {
+      "agent0/actor_grad_norm": 

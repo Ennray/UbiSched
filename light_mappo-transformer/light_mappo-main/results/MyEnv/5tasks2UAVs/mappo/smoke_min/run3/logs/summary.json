@@ -1,0 +1,86 @@
+[
+  {
+    "tag": "agent0/value_loss",
+    "scalars": {
+      "agent0/value_loss": 0.5511351883411407
+    },
+    "step": 25
+  },
+  {
+    "tag": "agent0/policy_loss",
+    "scalars": {
+      "agent0/policy_loss": 0.11257429818312327
+    },
+    "step": 25
+  },
+  {
+    "tag": "agent0/dist_entropy",
+    "scalars": {
+      "agent0/dist_entropy": 1.4495749473571777
+    },
+    "step": 25
+  },
+  {
+    "tag": "agent0/actor_grad_norm",
+    "scalars": {
+      "agent0/actor_grad_norm": 1.7907518148422241
+    },
+    "step": 25
+  },
+  {
+    "tag": "agent0/critic_grad_norm",
+    "scalars": {
+      "agent0/critic_grad_norm": 1.9989511966705322
+    },
+    "step": 25
+  },
+  {
+    "tag": "agent0/ratio",
+    "scalars": {
+      "agent0/ratio": 0.7423344254493713
+    },
+    "step": 25
+  },
+  {
+    "tag": "agent1/value_loss",
+    "scalars": {
+      "agent1/value_loss": 0.6484537521998087
+    },
+    "step": 25
+  },
+  {
+    "tag": "agent1/policy_loss",
+    "scalars": {
+      "agent1/policy_loss": 0.19568596879641215
+    },
+    "step": 25
+  },
+  {
+    "tag": "agent1/dist_entropy",
+    "scalars": {
+      "agent1/dist_entropy": 1.4723976771036784
+    },
+    "step": 25
+  },
+  {
+    "tag": "agent1/actor_grad_norm",
+    "scalars": {
+      "agent1/actor_grad_norm": 1.3494020700454712
+    },
+    "step": 25
+  },
+  {
+    "tag": "agent1/critic_grad_norm",
+    "scalars": {
+      "agent1/critic_grad_norm": 2.2782678604125977
+    },
+    "step": 25
+  },
+  {
+    "tag": "agent1/ratio",
+    "scalars": {
+      "agent1/ratio": 0.6344010829925537
+    },
+    "step": 25
+  }
+]

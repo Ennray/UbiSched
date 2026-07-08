@@ -1,0 +1,20 @@
+Docs/NETWORK_ARCHITECTURE.md:19:| **10.68.28.248** | `CapKnowGph.py` | **知识图谱服务器**。系统连接的远程 Neo4j 数据库地址，用于查询无人机能力与任务的匹配规则。 |
+iS2ROS_deploy_arm/CapKnowGph.py:5:# driver = GraphDatabase.driver("neo4j://10.68.78.52:7687",
+iSSROS/CapKnowGph.py:5:# driver = GraphDatabase.driver("neo4j://10.68.78.52:7687",
+iS2ROS_deploy_arm/CapKnowGph.py:3:driver = GraphDatabase.driver("neo4j://10.70.250.195:1005",
+iSSROS/CapKnowGph.py:3:driver = GraphDatabase.driver("neo4j://10.70.250.195:1005",
+Docs/NETWORK_ARCHITECTURE.md:18:| **127.0.0.1** | `connect_to_sim.py` | **本地回路地址**。用于 C++ 插件与本地运行的 Python 强化学习模型进行高速进程间通信。 |
+light_mappo-transformer/light_mappo-main/aaa.py:5:socket_client.connect(("127.0.0.1", 65432))
+light_mappo-transformer/light_mappo-main/train/connect_to_sim.py:187:    socket_server.bind(("127.0.0.1", 65432))
+iS2ROS_deploy_arm/light_mappo-transformer/light_mappo-main/aaa.py:5:socket_client.connect(("127.0.0.1", 65432))
+iS2ROS_deploy_arm/light_mappo-transformer/light_mappo-main/train/connect_to_sim.py:187:    socket_server.bind(("127.0.0.1", 65432))
+Docs/ARCHITECTURE.md:31:4.  **输出**: `CapDispatchManager` 将任务指令发送至 `192.168.137.1:9999`。
+Docs/NETWORK_ARCHITECTURE.md:17:| **192.168.137.1** | `CapDispatchManager` | **指令分发目标**。通常是 Windows 宿主机的 IP（ICS 网络范围）。IROS 将无人机的任务分配结果通过 UDP 发送到此地址。 |
+iSSROS/core/CapDispatchManager.cpp:19:#define DSET_IP_ADDRESS "192.168.137.1" 
+iSSROS/core/ContextRenewManager.cpp:80://    addr.sin_addr.s_addr = inet_addr("192.168.137.3");
+iSSROS/core/ContextRenewManager.cpp:163:// //    addr.sin_addr.s_addr = inet_addr("192.168.137.3");
+light_mappo-transformer/light_mappo-main/README_CN.md:7:- [视频解析](https://www.bilibili.com/video/BV1bd4y1L73N/?spm_id_from=333.999.0.0&vd_source=d8ab7686ea514acb6635faa5d2227d61)  
+iS2ROS_deploy_arm/light_mappo-transformer/light_mappo-main/README_CN.md:7:- [视频解析](https://www.bilibili.com/video/BV1bd4y1L73N/?spm_id_from=333.999.0.0&vd_source=d8ab7686ea514acb6635faa5d2227d61)  
+run_5_iros.sh:17:# export IROS_DISPATCH_IP=172.26.160.1
+iS2ROS_deploy_arm/run_5_iros.sh:17:# export IROS_DISPATCH_IP=172.26.160.1
+iSSROS/run_5_iros(1).sh:17:# export IROS_DISPATCH_IP=172.26.160.1

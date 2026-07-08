@@ -1,0 +1,16 @@
+mnt/
+build*/
+iSSROS/build*/
+iSSROS/build/
+iS2ROS_deploy_arm/
+plugins/assess/build*/
+plugins/select/build*/
+*.so
+*.so.*
+IROS
+*.tar.gz
+__pycache__/
+.vscode/
+.idea/
+*.dat
+*.pyc
