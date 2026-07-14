@@ -1,0 +1,43 @@
+{
+  "task_graph_id": "mission_001",
+  "created_time": 0.0,
+  "subtasks": [
+    {
+      "subtask_id": "detect_target",
+      "task_type": "detect",
+      "priority": 10,
+      "deadline": 120.0,
+      "location": [100.0, 50.0, 0.0],
+      "required_modalities_any": ["rgb", "infrared"],
+      "min_quality": 0.75,
+      "data_size": 20.0,
+      "compute_cycles": 1000000000.0,
+      "max_latency": 20.0,
+      "resource_count_min": 1,
+      "resource_count_max": 1,
+      "state": "ready"
+    },
+    {
+      "subtask_id": "classify_target",
+      "task_type": "classify",
+      "priority": 8,
+      "deadline": 180.0,
+      "location": [100.0, 50.0, 0.0],
+      "required_modalities_any": [],
+      "min_quality": 0.0,
+      "data_size": 50.0,
+      "compute_cycles": 10000000000.0,
+      "max_latency": 40.0,
+      "resource_count_min": 1,
+      "resource_count_max": 1,
+      "state": "pending"
+    }
+  ],
+  "edges": [
+    {
+      "src_subtask_id": "detect_target",
+      "dst_subtask_id": "classify_target",
+      "edge_type": "precedence"
+    }
+  ]
+}

@@ -1,0 +1,28 @@
+{
+  "normalization": {
+    "max_distance": 1000.0,
+    "max_latency": 120.0,
+    "max_energy": 1000.0,
+    "max_queue_length": 20.0,
+    "max_priority": 10.0,
+    "max_cpu_frequency": 10000000000.0,
+    "epsilon": 0.000001
+  },
+  "defaults": {
+    "task_type_base_time": {
+      "detect": 2.0,
+      "track": 1.0,
+      "classify": 0.5,
+      "compute": 0.0
+    },
+    "energy_per_mb": 0.1
+  },
+  "match_weights": {
+    "quality": 0.35,
+    "latency": 0.25,
+    "energy": 0.15,
+    "distance": 0.10,
+    "load": 0.10,
+    "priority": 0.05
+  }
+}
