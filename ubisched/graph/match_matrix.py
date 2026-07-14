@@ -65,6 +65,14 @@ class MatchEntry:
         ]
 
 
+@dataclass(frozen=True)
+class ExecutionEstimate:
+    """执行一个任务-资源组合时使用的原始时延和能耗估计。"""
+
+    latency: float
+    energy: float
+
+
 @dataclass
 class MatchMatrix:
     """任务数 N × 资源数 M 的匹配矩阵。"""
@@ -129,8 +137,9 @@ class RuleBasedScorer:
         # 先计算原始物理量，再统一归一化，保证不同量纲可以加权组合。
         quality_score = self._quality_score(subtask, resource)
         distance = _distance(subtask.location, resource.location)
-        latency = self._latency(subtask, resource, current_time)
-        energy = self._energy(subtask, resource, latency)
+        estimate = self.estimate_execution(subtask, resource, current_time)
+        latency = estimate.latency
+        energy = estimate.energy
         distance_cost = self._normalize(distance, "max_distance")
         latency_cost = self._normalize(latency, "max_latency")
         energy_cost = self._normalize(energy, "max_energy")
@@ -170,6 +179,21 @@ class RuleBasedScorer:
             load_cost=load_cost,
             match_score=match_score,
         )
+
+    def estimate_execution(
+        self,
+        subtask: SubTask,
+        resource: ResourceNode,
+        current_time: float = 0.0,
+    ) -> ExecutionEstimate:
+        """返回执行阶段可复用的原始时延和能耗估计。
+
+        MatchMatrix 和 AssignmentExecutor 共用这个入口，保证匹配阶段的
+        可行性判断与实际分配后的状态更新采用完全相同的估算公式。
+        """
+        latency = self._latency(subtask, resource, current_time)
+        energy = self._energy(subtask, resource, latency)
+        return ExecutionEstimate(latency=latency, energy=energy)
 
     def _quality_score(self, subtask: SubTask, resource: ResourceNode) -> float:
         """计算资源对任务的有效质量，结果归一化到 [0, 1]。"""
