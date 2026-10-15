@@ -49,6 +49,7 @@ class ResourceNode:
     remaining_energy: float
     occupied: bool
     release_time: float
+    online: bool = True
 
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> "ResourceNode":
@@ -80,6 +81,7 @@ class ResourceNode:
             remaining_energy=float(data.get("remaining_energy", 0.0)),
             occupied=bool(data.get("occupied", False)),
             release_time=float(data.get("release_time", 0.0)),
+            online=bool(data.get("online", True)),
         )
 
 

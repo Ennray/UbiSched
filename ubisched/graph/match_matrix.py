@@ -244,9 +244,9 @@ class RuleBasedScorer:
     ) -> bool:
         """依次检查状态、占用、能量、时间和资源能力等硬约束。"""
         # 未解除前序依赖的任务不能形成有效 assign 动作。
-        if subtask.state != "ready":
+        if subtask.state != "ready" or current_time < subtask.arrival_time:
             return False
-        if resource.occupied and resource.release_time > current_time:
+        if not resource.online or resource.occupied:
             return False
         if resource.remaining_energy < energy:
             return False
@@ -294,8 +294,8 @@ class MatchMatrixBuilder:
         current_time: float | None = None,
     ) -> MatchMatrix:
         # 构造矩阵前刷新依赖状态，确保只有当前可执行任务能够 feasible。
-        task_graph.update_ready_states()
         now = resource_graph.timestamp if current_time is None else current_time
+        task_graph.update_ready_states(now)
         # entries[i][j] 始终对应 subtask_ids[i] 与 resource_ids[j]。
         entries = [
             [

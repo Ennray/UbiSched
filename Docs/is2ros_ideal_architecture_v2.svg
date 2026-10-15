@@ -1,0 +1,99 @@
+﻿<svg xmlns="http://www.w3.org/2000/svg" width="1800" height="1280" viewBox="0 0 1800 1280">
+<defs>
+  <linearGradient id="head" x1="0" x2="1"><stop stop-color="#274e86"/><stop offset="1" stop-color="#4d79b5"/></linearGradient>
+  <linearGradient id="core" x1="0" x2="1"><stop stop-color="#eef4fc"/><stop offset="1" stop-color="#f8fbff"/></linearGradient>
+  <filter id="shadow"><feDropShadow dx="0" dy="2" stdDeviation="3" flood-opacity=".15"/></filter>
+  <marker id="arr" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto"><path d="M0 0L9 3 0 6Z" fill="#334761"/></marker>
+  <marker id="arrB" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto"><path d="M0 0L9 3 0 6Z" fill="#356ca8"/></marker>
+  <style>
+    .title{font:700 31px 'Microsoft YaHei',sans-serif;fill:#152238}.sub{font:16px 'Microsoft YaHei',sans-serif;fill:#607087}
+    .panel{fill:#fff;stroke:#58708f;stroke-width:2}.layer{fill:url(#core);stroke:#57789f;stroke-width:2}.hdr{fill:url(#head)}
+    .box{fill:#fff;stroke:#4d78ac;stroke-width:2;rx:6}.green{fill:#eef8f3;stroke:#3c936d;stroke-width:2;rx:6}
+    .purple{fill:#f5effc;stroke:#8158ad;stroke-width:2.4;rx:6}.orange{fill:#fff3e4;stroke:#d48725;stroke-width:2.4;rx:6}
+    .gray{fill:#f5f6f8;stroke:#778397;stroke-width:1.8;rx:6}.white{fill:#fff;stroke:#8fa0b5;stroke-width:1.5;rx:4}
+    .lt{font:700 20px 'Microsoft YaHei',sans-serif;fill:#fff}.h{font:700 19px 'Microsoft YaHei',sans-serif;fill:#18263b;text-anchor:middle}
+    .t{font:17px 'Microsoft YaHei',sans-serif;fill:#23344c;text-anchor:middle}.s{font:14px 'Microsoft YaHei',sans-serif;fill:#55657c;text-anchor:middle}
+    .left{font:700 19px 'Microsoft YaHei',sans-serif;fill:#243650}.badge{fill:#7547a2}.badgeO{fill:#c97414}.num{font:700 17px 'Microsoft YaHei';fill:#fff;text-anchor:middle}
+    .a{stroke:#334761;stroke-width:2.3;fill:none;marker-end:url(#arr)}.ab{stroke:#356ca8;stroke-width:2.5;fill:none;marker-end:url(#arrB)}
+    .dash{stroke:#8158ad;stroke-width:2.3;stroke-dasharray:8 6;fill:none;marker-end:url(#arr)}
+  </style>
+</defs>
+<rect width="1800" height="1280" fill="#fff"/>
+<text x="900" y="40" class="title" text-anchor="middle">iS2ROS 基于能力的异构感知资源动态自适应管理总体框架</text>
+<text x="900" y="68" class="sub" text-anchor="middle">任务驱动、能力统一抽象、运行时效能评估、动态选择、插件化执行与反馈闭环</text>
+
+<!-- application -->
+<rect x="65" y="92" width="1670" height="145" class="panel" filter="url(#shadow)"/>
+<rect x="65" y="92" width="210" height="145" class="hdr"/><text x="170" y="137" class="lt" text-anchor="middle">AirSim 任务与</text><text x="170" y="166" class="lt" text-anchor="middle">半实物验证层</text><text x="170" y="196" class="s" fill="#eaf2ff">场景—任务—感知—执行</text>
+<rect x="295" y="112" width="255" height="105" class="green"/><text x="422" y="145" class="h">仿真场景与环境注入</text><text x="422" y="173" class="s">光照 · 雾 · 雨 · 扬尘 · 时间</text><text x="422" y="197" class="s">目标对象 · 红外温度/发射率建模</text>
+<rect x="575" y="112" width="255" height="105" class="green"/><text x="702" y="145" class="h">多无人机任务组织</text><text x="702" y="173" class="s">任务区域 · 航点 · 航迹规划</text><text x="702" y="197" class="s">起降 · 并发飞行 · 任务完成</text>
+<rect x="855" y="112" width="255" height="105" class="green"/><text x="982" y="145" class="h">异构感知数据采集</text><text x="982" y="173" class="s">可见光 EO · 红外 IR · 分割图像</text><text x="982" y="197" class="s">多机多线程采集 · 数据集生成</text>
+<rect x="1135" y="112" width="255" height="105" class="green"/><text x="1262" y="145" class="h">iS2ROS 半实物交互</text><text x="1262" y="173" class="s">上报任务、环境与 UAV 状态</text><text x="1262" y="197" class="s">接收“任务—传感器—无人机”方案</text>
+<rect x="1415" y="112" width="285" height="105" class="green"/><text x="1557" y="145" class="h">任务执行与感知资源切换</text><text x="1557" y="173" class="s">航迹执行 · EO/IR 在线切换</text><text x="1557" y="197" class="s">图像/距离采集 · 进度反馈 · 重选择</text>
+
+<!-- runtime context -->
+<rect x="65" y="265" width="1670" height="158" class="layer" filter="url(#shadow)"/>
+<rect x="65" y="265" width="210" height="158" class="hdr"/><text x="170" y="325" class="lt" text-anchor="middle">运行时上下文层</text><text x="170" y="357" class="s" fill="#eaf2ff">持续感知系统变化</text>
+<rect x="305" y="295" width="250" height="98" class="box"/><text x="430" y="331" class="h">环境上下文</text><text x="430" y="359" class="s">光照 · 雨雾 · 天气 · 区域</text>
+<rect x="585" y="295" width="250" height="98" class="box"/><text x="710" y="331" class="h">平台运行状态</text><text x="710" y="359" class="s">位置 · 能量 · 健康 · 通信</text>
+<rect x="865" y="295" width="250" height="98" class="box"/><text x="990" y="331" class="h">资源运行状态</text><text x="990" y="359" class="s">可用性 · 参数 · 功耗 · 占用</text>
+<rect x="1145" y="295" width="250" height="98" class="box"/><text x="1270" y="331" class="h">任务运行状态</text><text x="1270" y="359" class="s">进度 · 目标变化 · 执行效果</text>
+<rect x="1425" y="295" width="275" height="98" class="box"/><text x="1562" y="331" class="h">上下文更新与事件触发</text><text x="1562" y="359" class="s">周期更新 · 故障 · 新任务 · 重规划</text>
+
+<!-- capability abstraction -->
+<rect x="65" y="451" width="1670" height="190" class="panel" filter="url(#shadow)"/>
+<rect x="65" y="451" width="210" height="190" class="hdr"/><text x="170" y="520" class="lt" text-anchor="middle">能力与资源抽象层</text><text x="170" y="552" class="s" fill="#eaf2ff">屏蔽异构资源差异</text>
+<rect x="305" y="480" width="305" height="132" class="purple"/><circle cx="330" cy="503" r="17" class="badge"/><text x="330" y="509" class="num">1</text><text x="457" y="516" class="h">基于能力的自适应异构感知</text><text x="457" y="542" class="h">资源运行时选择模型</text><text x="457" y="573" class="s">任务需求、资源能力、环境与状态统一关联</text><text x="457" y="595" class="s">支撑“评估—匹配—选择—反馈”的总体模型</text>
+<rect x="640" y="480" width="245" height="132" class="box"/><text x="762" y="516" class="h">资源能力描述</text><text x="762" y="548" class="s">能力类型 · 参数 · 精度</text><text x="762" y="573" class="s">作用范围 · 功耗 · 位置</text><text x="762" y="595" class="s">静态属性 + 动态能力等级</text>
+<rect x="915" y="480" width="245" height="132" class="box"/><text x="1037" y="516" class="h">任务能力需求描述</text><text x="1037" y="548" class="s">所需能力 · 期望效能</text><text x="1037" y="573" class="s">资源数量 · 时空约束</text><text x="1037" y="595" class="s">硬约束 + 优化目标</text>
+<rect x="1190" y="480" width="245" height="132" class="box"/><text x="1312" y="516" class="h">能力知识组织</text><text x="1312" y="548" class="s">能力知识图谱 · 关联规则</text><text x="1312" y="573" class="s">环境影响模型 · 历史经验</text><text x="1312" y="595" class="s">模型与知识持续演化</text>
+<rect x="1465" y="480" width="235" height="132" class="box"/><text x="1582" y="516" class="h">统一能力接口</text><text x="1582" y="548" class="s">注册 · 查询 · 更新</text><text x="1582" y="573" class="s">评估 · 匹配 · 分配</text><text x="1582" y="595" class="s">向上提供一致语义</text>
+
+<!-- adaptive core -->
+<rect x="65" y="669" width="1670" height="315" class="layer" filter="url(#shadow)"/>
+<rect x="65" y="669" width="210" height="315" class="hdr"/><text x="170" y="790" class="lt" text-anchor="middle">动态自适应核心层</text><text x="170" y="822" class="s" fill="#eaf2ff">iS2ROS 核心闭环</text>
+
+<rect x="305" y="700" width="245" height="112" class="box"/><text x="427" y="737" class="h">能力需求管理</text><text x="427" y="767" class="s">需求解析 · 约束提取</text><text x="427" y="790" class="s">需求变化检测</text>
+
+<rect x="580" y="700" width="335" height="112" class="purple"/><circle cx="605" cy="723" r="17" class="badge"/><text x="605" y="729" class="num">2</text><text x="747" y="737" class="h">异构感知资源的</text><text x="747" y="764" class="h">运行时效能评估算法</text><text x="747" y="791" class="s">结合环境与状态，实时计算能力效能等级</text>
+
+<rect x="945" y="700" width="335" height="112" class="purple"/><circle cx="970" cy="723" r="17" class="badge"/><text x="970" y="729" class="num">3</text><text x="1112" y="737" class="h">基于能力的异构感知资源</text><text x="1112" y="764" class="h">动态自适应选择算法</text><text x="1112" y="791" class="s">能力匹配、候选生成、多目标优化与选择</text>
+
+<rect x="1310" y="700" width="210" height="112" class="box"/><text x="1415" y="737" class="h">分配与冲突消解</text><text x="1415" y="767" class="s">任务—平台—载荷绑定</text><text x="1415" y="790" class="s">约束校验 · 冲突处理</text>
+<rect x="1545" y="700" width="155" height="112" class="box"/><text x="1622" y="737" class="h">调度下发</text><text x="1622" y="767" class="s">指令封装</text><text x="1622" y="790" class="s">执行确认</text>
+
+<rect x="305" y="842" width="245" height="108" class="gray"/><text x="427" y="879" class="h">能力自适应管理</text><text x="427" y="909" class="s">闭环编排 · 生命周期管理</text><text x="427" y="932" class="s">策略切换 · 异常恢复</text>
+<rect x="580" y="842" width="335" height="108" class="orange"/><circle cx="605" cy="865" r="17" class="badgeO"/><text x="605" y="871" class="num">4</text><text x="747" y="879" class="h">运行时效能评估算法插件</text><text x="747" y="909" class="s">评估接口 · 动态加载 · 算法替换</text><text x="747" y="932" class="s">可接入规则、函数模型或学习模型</text>
+<rect x="945" y="842" width="335" height="108" class="orange"/><circle cx="970" cy="865" r="17" class="badgeO"/><text x="970" y="871" class="num">5</text><text x="1112" y="879" class="h">动态异构感知资源选择算法插件</text><text x="1112" y="909" class="s">统一选择接口 · 动态加载 · 策略替换</text><text x="1112" y="932" class="s">MAPPO / Transformer · MTCTS · 规则策略</text>
+<rect x="1310" y="842" width="390" height="108" class="gray"/><text x="1505" y="879" class="h">反馈驱动的在线自适应</text><text x="1505" y="909" class="s">执行效果反馈 · 效能再评估 · 资源重选</text><text x="1505" y="932" class="s">任务、环境或资源变化时触发闭环</text>
+
+<!-- support -->
+<rect x="65" y="1012" width="1670" height="175" class="panel" filter="url(#shadow)"/>
+<rect x="65" y="1012" width="210" height="175" class="hdr"/><text x="170" y="1078" class="lt" text-anchor="middle">基础支撑与执行层</text><text x="170" y="1110" class="s" fill="#eaf2ff">可扩展运行基础</text>
+<rect x="305" y="1042" width="215" height="112" class="gray"/><text x="412" y="1078" class="h">插件运行机制</text><text x="412" y="1108" class="s">插件注册 · 动态装载</text><text x="412" y="1132" class="s">接口隔离 · 版本管理</text>
+<rect x="545" y="1042" width="215" height="112" class="gray"/><text x="652" y="1078" class="h">通信与协议适配</text><text x="652" y="1108" class="s">环境接收 · 指令下发</text><text x="652" y="1132" class="s">仿真 / 实机协议适配</text>
+<rect x="785" y="1042" width="215" height="112" class="gray"/><text x="892" y="1078" class="h">数据与知识存储</text><text x="892" y="1108" class="s">资源配置 · 能力知识</text><text x="892" y="1132" class="s">运行状态 · 历史记录</text>
+<rect x="1025" y="1042" width="215" height="112" class="gray"/><text x="1132" y="1078" class="h">智能模型支撑</text><text x="1132" y="1108" class="s">策略权重 · 推理环境</text><text x="1132" y="1132" class="s">训练与模型更新</text>
+<rect x="1265" y="1042" width="205" height="112" class="gray"/><text x="1367" y="1078" class="h">运行保障</text><text x="1367" y="1108" class="s">日志 · 监控 · 告警</text><text x="1367" y="1132" class="s">故障检测与恢复</text>
+<rect x="1495" y="1042" width="205" height="112" class="gray"/><text x="1597" y="1078" class="h">执行资源</text><text x="1597" y="1108" class="s">无人平台 · 感知载荷</text><text x="1597" y="1132" class="s">ARM / x86 异构平台</text>
+
+<!-- flows -->
+<path d="M422 217V265" class="ab"/><path d="M702 217V265" class="ab"/><path d="M982 217V265" class="ab"/><path d="M1262 217V265" class="ab"/><path d="M1557 217V265" class="ab"/>
+<path d="M430 393V451" class="a"/><path d="M990 393V451" class="a"/><path d="M1562 393V451" class="a"/>
+<path d="M1037 612V665H427V700" class="a"/><path d="M762 612V665H747V700" class="a"/><path d="M1312 612V665H1112V700" class="a"/>
+<path d="M550 756H580" class="a"/><path d="M915 756H945" class="a"/><path d="M1280 756H1310" class="a"/><path d="M1520 756H1545" class="a"/>
+<path d="M747 812V842" class="dash"/><path d="M1112 812V842" class="dash"/>
+<path d="M1280 896H1310" class="a"/>
+<path d="M1622 812V825C1622 825 1720 825 1720 600V393H1695" class="ab"/>
+<path d="M1505 842V826H1415V812" class="ab"/>
+<path d="M412 1042V985H747V950" class="a"/><path d="M1132 1042V985H1112V950" class="a"/>
+
+<!-- legend -->
+<rect x="65" y="1210" width="1670" height="45" fill="#f7f9fc" stroke="#b5c0cf"/>
+<circle cx="105" cy="1232" r="12" class="badge"/><text x="105" y="1237" class="num" font-size="12">1</text><text x="125" y="1238" class="sub">紫色：核心模型与算法成果</text>
+<circle cx="430" cy="1232" r="12" class="badgeO"/><text x="430" y="1237" class="num" font-size="12">4</text><text x="450" y="1238" class="sub">橙色：算法插件化实现</text>
+<line x1="735" y1="1232" x2="790" y2="1232" class="a"/><text x="805" y="1238" class="sub">运行主链路</text>
+<line x1="980" y1="1232" x2="1035" y2="1232" class="dash"/><text x="1050" y="1238" class="sub">算法与插件实现关系</text>
+<text x="1375" y="1238" class="sub">五项关键内容属于 iS2ROS 总体能力的一部分</text>
+</svg>
+

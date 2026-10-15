@@ -3,7 +3,7 @@ from __future__ import annotations
 """动态调度过程中的任务、资源、时间和分配记录。"""
 
 from dataclasses import dataclass, field
-from typing import List
+from typing import List, Sequence
 
 from ubisched.graph.resource_graph import ResourceGraph, ResourceNode
 from ubisched.graph.task_graph import SubTask, TaskGraph
@@ -20,6 +20,8 @@ class AssignmentRecord:
     estimated_latency: float
     estimated_energy: float
     status: str = "running"
+    actual_end_time: float | None = None
+    failure_reason: str | None = None
 
 
 @dataclass
@@ -37,6 +39,7 @@ class SchedulingState:
         if self.current_time < 0:
             raise ValueError("current_time must be non-negative")
         self.resource_graph.timestamp = self.current_time
+        self.task_graph.update_ready_states(float(self.current_time))
 
     @property
     def now(self) -> float:
@@ -58,6 +61,11 @@ class SchedulingState:
             for assignment in self.assignments
             if assignment.status == "running"
         ]
+
+    def add_subtask(self, subtask: SubTask, predecessors: Sequence[str] = ()) -> None:
+        """仿真运行期间增加子任务并更新就绪状态。"""
+        self.task_graph.add_subtask(subtask, predecessors)
+        self.task_graph.update_ready_states(self.now)
 
     def summary(self) -> str:
         running = len(self.active_assignments())

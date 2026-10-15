@@ -1,0 +1,73 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="1050" viewBox="0 0 1600 1050">
+  <defs>
+    <style>
+      .title{font:700 30px 'Microsoft YaHei',sans-serif;fill:#17233c}.subtitle{font:16px 'Microsoft YaHei',sans-serif;fill:#596780}
+      .layer{fill:#f7f9fc;stroke:#53657d;stroke-width:2}.band{fill:#eaf1fb;stroke:#5077aa;stroke-width:2}
+      .box{fill:#fff;stroke:#4776b4;stroke-width:2;rx:5}.ideal{fill:#f2ecff;stroke:#8359b5;stroke-width:2;rx:5}
+      .ai{fill:#fff2e2;stroke:#d88925;stroke-width:2;rx:5}.external{fill:#edf7f2;stroke:#39966d;stroke-width:2;rx:5}
+      .store{fill:#f2f3f5;stroke:#707b8c;stroke-width:2;rx:5}.t{font:18px 'Microsoft YaHei',sans-serif;fill:#182236;text-anchor:middle}.th{font:700 20px 'Microsoft YaHei',sans-serif;fill:#17233c;text-anchor:middle}
+      .small{font:15px 'Microsoft YaHei',sans-serif;fill:#42516a;text-anchor:middle}.label{font:700 21px 'Microsoft YaHei',sans-serif;fill:#253650}
+      .arrow{stroke:#28384f;stroke-width:2.5;fill:none;marker-end:url(#arrow)}.dash{stroke:#8359b5;stroke-width:2.5;stroke-dasharray:8 6;fill:none;marker-end:url(#arrowPurple)}
+    </style>
+    <marker id="arrow" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto"><path d="M0,0 L9,3 L0,6 Z" fill="#28384f"/></marker>
+    <marker id="arrowPurple" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto"><path d="M0,0 L9,3 L0,6 Z" fill="#8359b5"/></marker>
+  </defs>
+  <rect width="1600" height="1050" fill="#ffffff"/>
+  <text x="800" y="42" class="title" text-anchor="middle">iS2ROS 理想分层架构（不含 UbiSched）</text>
+  <text x="800" y="70" class="subtitle" text-anchor="middle">面向多无人机任务的“感知—能力建模—自适应决策—执行—反馈”闭环</text>
+
+  <!-- Layer 1 -->
+  <rect x="90" y="95" width="1420" height="145" class="layer"/>
+  <text x="20" y="150" class="label">应用与</text><text x="20" y="178" class="label">任务层</text>
+  <rect x="125" y="120" width="250" height="90" class="external"/><text x="250" y="158" class="th">任务应用</text><text x="250" y="186" class="small">任务发布 · 状态展示 · 人机交互</text>
+  <rect x="410" y="120" width="250" height="90" class="external"/><text x="535" y="158" class="th">仿真 / 真实环境</text><text x="535" y="186" class="small">AirSim · 飞行平台 · 外部系统</text>
+  <rect x="695" y="120" width="250" height="90" class="external"/><text x="820" y="158" class="th">任务与约束输入</text><text x="820" y="186" class="small">目标 · 优先级 · 时限 · 环境约束</text>
+  <rect x="980" y="120" width="250" height="90" class="external"/><text x="1105" y="158" class="th">运行监控</text><text x="1105" y="186" class="small">任务进度 · 资源状态 · 异常告警</text>
+  <rect x="1265" y="120" width="210" height="90" class="external"/><text x="1370" y="158" class="th">执行终端</text><text x="1370" y="186" class="small">UAV · 传感器 · 载荷</text>
+
+  <!-- Layer 2 -->
+  <rect x="90" y="270" width="1420" height="155" class="band"/>
+  <text x="20" y="330" class="label">接入与</text><text x="20" y="358" class="label">上下文层</text>
+  <rect x="130" y="300" width="260" height="95" class="box"/><text x="260" y="338" class="th">通信接入</text><text x="260" y="367" class="small">环境接收 · 指令下发 · 协议适配</text>
+  <rect x="430" y="300" width="300" height="95" class="box"/><text x="580" y="338" class="th">上下文更新</text><text x="580" y="367" class="small">环境 · UAV 状态 · 观测 · 任务状态</text>
+  <rect x="770" y="300" width="300" height="95" class="box"/><text x="920" y="338" class="th">统一状态表示</text><text x="920" y="367" class="small">位置 · 气象 · 能量 · 载荷 · 可用性</text>
+  <rect x="1110" y="300" width="350" height="95" class="box"/><text x="1285" y="338" class="th">闭环反馈与事件触发</text><text x="1285" y="367" class="small">周期更新 · 状态变化 · 故障 · 新任务</text>
+
+  <!-- Layer 3 capability -->
+  <rect x="90" y="455" width="1420" height="190" class="layer"/>
+  <text x="20" y="515" class="label">能力与</text><text x="20" y="543" class="label">资源层</text>
+  <rect x="125" y="490" width="245" height="120" class="ideal"/><text x="247" y="526" class="th">资源能力建模</text><text x="247" y="556" class="small">平台 · 传感器 · 参数</text><text x="247" y="582" class="small">位置 · 功耗 · 能力等级</text>
+  <rect x="400" y="490" width="245" height="120" class="ideal"/><text x="522" y="526" class="th">任务能力需求</text><text x="522" y="556" class="small">任务所需能力 · 阈值</text><text x="522" y="582" class="small">数量 · 质量 · 时空约束</text>
+  <rect x="675" y="490" width="245" height="120" class="ideal"/><text x="797" y="526" class="th">环境能力评估</text><text x="797" y="556" class="small">环境影响 · 能力量化</text><text x="797" y="582" class="small">状态更新 · 可用性判定</text>
+  <rect x="950" y="490" width="245" height="120" class="ideal"/><text x="1072" y="526" class="th">能力匹配与候选集</text><text x="1072" y="556" class="small">需求—能力匹配</text><text x="1072" y="582" class="small">过滤不可行动作</text>
+  <rect x="1225" y="490" width="245" height="120" class="ideal"/><text x="1347" y="526" class="th">能力知识与历史</text><text x="1347" y="556" class="small">能力知识图谱 · 经验</text><text x="1347" y="582" class="small">评估模型 · 运行记录</text>
+
+  <!-- Layer 4 -->
+  <rect x="90" y="675" width="1420" height="190" class="band"/>
+  <text x="20" y="735" class="label">自适应</text><text x="20" y="763" class="label">决策层</text>
+  <rect x="125" y="710" width="245" height="120" class="box"/><text x="247" y="746" class="th">能力需求管理</text><text x="247" y="776" class="small">需求构建 · 变化检测</text><text x="247" y="802" class="small">触发重规划</text>
+  <rect x="400" y="710" width="245" height="120" class="box"/><text x="522" y="746" class="th">能力自适应引擎</text><text x="522" y="776" class="small">流程编排 · 策略选择</text><text x="522" y="802" class="small">生命周期管理</text>
+  <rect x="675" y="710" width="245" height="120" class="ai"/><text x="797" y="746" class="th">智能决策策略</text><text x="797" y="776" class="small">MAPPO / Transformer</text><text x="797" y="802" class="small">MTCTS / 规则策略</text>
+  <rect x="950" y="710" width="245" height="120" class="box"/><text x="1072" y="746" class="th">分配结果管理</text><text x="1072" y="776" class="small">任务—平台—传感器</text><text x="1072" y="802" class="small">冲突消解 · 结果校验</text>
+  <rect x="1225" y="710" width="245" height="120" class="box"/><text x="1347" y="746" class="th">能力调度下发</text><text x="1347" y="776" class="small">指令封装 · 执行确认</text><text x="1347" y="802" class="small">失败恢复 · 再调度</text>
+
+  <!-- Layer 5 -->
+  <rect x="90" y="895" width="1420" height="115" class="layer"/>
+  <text x="20" y="945" class="label">基础支撑层</text>
+  <rect x="130" y="920" width="250" height="65" class="store"/><text x="255" y="960" class="t">插件管理与动态加载</text>
+  <rect x="420" y="920" width="250" height="65" class="store"/><text x="545" y="960" class="t">能力 / 环境数据存储</text>
+  <rect x="710" y="920" width="250" height="65" class="store"/><text x="835" y="960" class="t">模型与策略权重</text>
+  <rect x="1000" y="920" width="210" height="65" class="store"/><text x="1105" y="960" class="t">日志与可观测性</text>
+  <rect x="1250" y="920" width="210" height="65" class="store"/><text x="1355" y="960" class="t">配置与跨平台适配</text>
+
+  <!-- Main downward flow -->
+  <path d="M535 210 L535 300" class="arrow"/><path d="M820 210 L820 300" class="arrow"/>
+  <path d="M580 395 L580 455" class="arrow"/><path d="M920 395 L920 455" class="arrow"/>
+  <path d="M522 610 L522 710" class="arrow"/><path d="M797 610 L797 710" class="arrow"/><path d="M1072 610 L1072 710" class="arrow"/>
+  <path d="M370 550 L400 550" class="dash"/><path d="M645 550 L675 550" class="dash"/><path d="M920 550 L950 550" class="dash"/>
+  <path d="M645 770 L675 770" class="arrow"/><path d="M920 770 L950 770" class="arrow"/><path d="M1195 770 L1225 770" class="arrow"/>
+  <path d="M1347 710 C1347 650 1485 650 1485 395 L1460 395" class="arrow"/>
+  <path d="M1285 300 C1285 255 1370 255 1370 210" class="arrow"/>
+  <text x="1450" y="650" class="small" transform="rotate(-90 1450 650)">执行反馈闭环</text>
+  <text x="760" y="1038" class="subtitle">紫色模块与虚线：理想架构中应完整接入的能力语义链路　｜　橙色模块：可插拔智能策略</text>
+</svg>

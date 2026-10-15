@@ -52,6 +52,8 @@ class SubTask:
     resource_count_min: int
     resource_count_max: int
     state: str
+    # 任务到达的绝对仿真时刻；默认为 0，兼容原有配置。
+    arrival_time: float = 0.0
 
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> "SubTask":
@@ -72,6 +74,7 @@ class SubTask:
             resource_count_min=int(data.get("resource_count_min", 1)),
             resource_count_max=int(data.get("resource_count_max", 1)),
             state=str(data.get("state", "pending")),
+            arrival_time=float(data.get("arrival_time", 0.0)),
         )
 
 
@@ -125,12 +128,32 @@ class TaskGraph:
                 return subtask
         raise KeyError(f"Unknown subtask_id: {subtask_id}")
 
-    def update_ready_states(self) -> None:
-        """根据前序完成情况，把满足条件的 pending 节点推进为 ready。
+    def add_subtask(self, subtask: SubTask, predecessors: Sequence[str] = ()) -> None:
+        """在运行中注入一个新任务；只允许连接到已经存在的前序任务。
 
-        没有前序节点的 pending 子任务会直接 ready；running、finished 等
-        非 pending 状态不会被本方法覆盖。
+        该接口用于追加到达的子任务，不修改已有任务的先后关系。
         """
+        if subtask.subtask_id in self.subtask_ids():
+            raise ValueError(f"Duplicate subtask_id: {subtask.subtask_id}")
+        if subtask.arrival_time < 0:
+            raise ValueError("arrival_time must be non-negative")
+        if subtask.state not in {"pending", "ready"}:
+            raise ValueError("New subtask must be pending or ready")
+        if len(set(predecessors)) != len(predecessors):
+            raise ValueError("Duplicate predecessors")
+        missing = [src for src in predecessors if src not in self.subtask_ids()]
+        if missing:
+            raise ValueError(f"Unknown predecessor(s): {missing}")
+
+        subtask.state = "pending"  # 统一由运行时和依赖判断其可执行时刻
+        self.subtasks.append(subtask)
+        self.edges.extend(
+            TaskEdge(src_subtask_id=src, dst_subtask_id=subtask.subtask_id)
+            for src in predecessors
+        )
+
+    def update_ready_states(self, current_time: float = 0.0) -> None:
+        """任务已到达且全部直接前序完成时，才允许进入 ready 状态。"""
         finished = {
             subtask.subtask_id for subtask in self.subtasks if subtask.state == "finished"
         }
@@ -140,15 +163,17 @@ class TaskGraph:
         for edge in self.edges:
             predecessors.setdefault(edge.dst_subtask_id, []).append(edge.src_subtask_id)
 
-        # 一个节点的全部直接前序都 finished，才允许进入候选匹配集合。
         for subtask in self.subtasks:
-            if subtask.state != "pending":
+            if subtask.state not in {"pending", "ready"}:
                 continue
-            if all(src_id in finished for src_id in predecessors.get(subtask.subtask_id, [])):
-                subtask.state = "ready"
+            arrived = current_time >= subtask.arrival_time
+            predecessors_done = all(
+                src_id in finished for src_id in predecessors.get(subtask.subtask_id, [])
+            )
+            subtask.state = "ready" if arrived and predecessors_done else "pending"
 
-    def ready_subtasks(self) -> List[SubTask]:
-        self.update_ready_states()
+    def ready_subtasks(self, current_time: float = 0.0) -> List[SubTask]:
+        self.update_ready_states(current_time)
         return [subtask for subtask in self.subtasks if subtask.state == "ready"]
 
     def summary(self) -> str:

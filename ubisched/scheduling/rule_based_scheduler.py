@@ -97,7 +97,7 @@ class RuleBasedScheduler:
                 # 不立即推进时间，让其他空闲资源仍可接收独立的 ready 任务。
                 continue
 
-            if state.active_assignments():
+            if self.executor.next_event_time(state) is not None:
                 self.executor.advance_to_next_event(state)
                 continue
 

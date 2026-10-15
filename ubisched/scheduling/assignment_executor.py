@@ -92,24 +92,70 @@ class AssignmentExecutor:
             subtask = state.get_subtask(assignment.subtask_id)
             resource = state.get_resource(assignment.resource_id)
             assignment.status = "finished"
+            assignment.actual_end_time = assignment.completion_time
             subtask.state = "finished"
             resource.occupied = False
             resource.release_time = assignment.completion_time
             completed.append(assignment)
 
         # 完成任务后立即解锁所有前序条件已经满足的后继任务。
-        state.task_graph.update_ready_states()
+        state.task_graph.update_ready_states(state.now)
         return completed
+
+    def fail_resource(
+        self,
+        state: SchedulingState,
+        resource_id: str,
+        *,
+        retry_task: bool = True,
+        reason: str = "resource_offline",
+    ) -> List[AssignmentRecord]:
+        """处理资源掉线：中断运行任务，必要时重新排队等待调度。
+
+        在调用前先 advance_time() 到故障时刻。已预扣的估算能耗不返还，
+        避免把失败执行当作完全没有成本。实际能耗将在执行反馈模块接入后计算。
+        """
+        resource = state.get_resource(resource_id)
+        resource.online = False
+        interrupted: List[AssignmentRecord] = []
+        for assignment in state.active_assignments():
+            if assignment.resource_id != resource_id:
+                continue
+            assignment.status = "failed"
+            assignment.actual_end_time = state.now
+            assignment.failure_reason = reason
+            subtask = state.get_subtask(assignment.subtask_id)
+            subtask.state = "pending" if retry_task else "failed"
+            interrupted.append(assignment)
+        resource.occupied = False
+        resource.release_time = state.now
+        state.task_graph.update_ready_states(state.now)
+        return interrupted
+
+    def restore_resource(self, state: SchedulingState, resource_id: str) -> None:
+        """使掉线资源重新参与匹配，不能自动恢复中断任务。"""
+        state.get_resource(resource_id).online = True
+
+    def next_event_time(self, state: SchedulingState) -> float | None:
+        """获取最近的任务完成或待到达任务的时刻。"""
+        future = [
+            assignment.completion_time
+            for assignment in state.active_assignments()
+            if assignment.completion_time > state.now
+        ]
+        future.extend(
+            task.arrival_time
+            for task in state.task_graph.subtasks
+            if task.state in {"pending", "ready"} and task.arrival_time > state.now
+        )
+        return min(future) if future else None
 
     def advance_to_next_event(
         self,
         state: SchedulingState,
     ) -> List[AssignmentRecord]:
-        """推进到最近一次任务完成事件；没有运行任务时保持状态不变。"""
-        active = state.active_assignments()
-        if not active:
+        """推进到最近任务完成或新任务到达的时间点。"""
+        next_time = self.next_event_time(state)
+        if next_time is None:
             return []
-        next_completion = min(
-            assignment.completion_time for assignment in active
-        )
-        return self.advance_time(state, next_completion)
+        return self.advance_time(state, next_time)
