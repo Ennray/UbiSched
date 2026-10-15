@@ -6,12 +6,15 @@ from ubisched.scheduling.rule_based_scheduler import (
     SchedulerRunResult,
     SelectedAssignment,
 )
+from ubisched.scheduling.scheduler_env import RewardConfig, SchedulerEnv
 from ubisched.scheduling.scheduling_state import AssignmentRecord, SchedulingState
 
 __all__ = [
     "AssignmentExecutor",
     "AssignmentRecord",
+    "RewardConfig",
     "RuleBasedScheduler",
+    "SchedulerEnv",
     "SchedulerRunResult",
     "SchedulingState",
     "SelectedAssignment",

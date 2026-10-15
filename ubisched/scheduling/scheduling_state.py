@@ -19,6 +19,7 @@ class AssignmentRecord:
     completion_time: float
     estimated_latency: float
     estimated_energy: float
+    estimated_quality: float = 0.0
     status: str = "running"
     actual_end_time: float | None = None
     failure_reason: str | None = None

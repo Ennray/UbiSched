@@ -61,6 +61,7 @@ class AssignmentExecutor:
             completion_time=completion_time,
             estimated_latency=estimate.latency,
             estimated_energy=estimate.energy,
+            estimated_quality=match_entry.quality_score,
         )
 
         subtask.state = "running"
