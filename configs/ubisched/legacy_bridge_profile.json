@@ -1,0 +1,10 @@
+{
+  "sensors": [
+    {"legacy_sensor_index": 0, "modality": "legacy", "quality": 0.85, "power": 1.0, "remaining_energy": 100.0},
+    {"legacy_sensor_index": 1, "modality": "legacy", "quality": 0.80, "power": 1.0, "remaining_energy": 100.0},
+    {"legacy_sensor_index": 2, "modality": "legacy", "quality": 0.75, "power": 1.0, "remaining_energy": 100.0}
+  ],
+  "priority_by_task": {"0": 3, "1": 2, "2": 1},
+  "modality_by_task": {},
+  "min_quality_by_task": {}
+}

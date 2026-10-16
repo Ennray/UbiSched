@@ -3,7 +3,7 @@ from __future__ import annotations
 """动态调度过程中的任务、资源、时间和分配记录。"""
 
 from dataclasses import dataclass, field
-from typing import List, Sequence
+from typing import List, Sequence, Mapping
 
 from ubisched.graph.resource_graph import ResourceGraph, ResourceNode
 from ubisched.graph.task_graph import SubTask, TaskGraph
@@ -23,6 +23,26 @@ class AssignmentRecord:
     status: str = "running"
     actual_end_time: float | None = None
     failure_reason: str | None = None
+    communication_latency: float = 0.0
+    communication_energy: float = 0.0
+    communication_hops: list = field(default_factory=list)
+    communication_queue_wait: float = 0.0
+    compute_start_time: float | None = None
+
+
+@dataclass
+class TransferReservation:
+    """链路预约，可处于等待、传输中、完成或取消四种状态。"""
+    subtask_id: str
+    resource_id: str
+    source_resource_id: str
+    source_uav_id: str
+    target_uav_id: str
+    start_time: float
+    end_time: float
+    data_size_mb: float
+    energy: float
+    status: str = "queued"
 
 
 @dataclass
@@ -33,6 +53,7 @@ class SchedulingState:
     resource_graph: ResourceGraph
     current_time: float | None = None
     assignments: List[AssignmentRecord] = field(default_factory=list)
+    transfer_reservations: List[TransferReservation] = field(default_factory=list)
 
     def __post_init__(self) -> None:
         if self.current_time is None:
@@ -63,9 +84,10 @@ class SchedulingState:
             if assignment.status == "running"
         ]
 
-    def add_subtask(self, subtask: SubTask, predecessors: Sequence[str] = ()) -> None:
+    def add_subtask(self, subtask: SubTask, predecessors: Sequence[str] = (),
+                    predecessor_data_sizes: Mapping[str, float] | None = None) -> None:
         """仿真运行期间增加子任务并更新就绪状态。"""
-        self.task_graph.add_subtask(subtask, predecessors)
+        self.task_graph.add_subtask(subtask, predecessors, predecessor_data_sizes)
         self.task_graph.update_ready_states(self.now)
 
     def summary(self) -> str:

@@ -14,6 +14,10 @@ from typing import Any, Dict, List
 
 from ubisched.graph.resource_graph import ResourceGraph, ResourceNode
 from ubisched.graph.task_graph import SubTask, TaskGraph
+from ubisched.graph.data_transfer import DataTransferEstimate, estimate_data_transfer
+from typing import TYPE_CHECKING
+if TYPE_CHECKING:
+    from ubisched.scheduling.scheduling_state import SchedulingState
 
 
 def _load_structured_file(path: str | Path) -> Dict[str, Any]:
@@ -105,6 +109,8 @@ class RuleBasedScorer:
     """用透明、可配置的规则计算单个任务-资源组合的匹配结果。"""
     def __init__(self, config: Dict[str, Any] | None = None):
         self.config = config or {}
+        # 旧版本保留硬截止时间；新实验可显式启用软截止时间。
+        self.strict_deadlines = bool(self.config.get("strict_deadlines", True))
         self.normalization = self.config.get("normalization", {})
         self.defaults = self.config.get("defaults", {})
         self.weights = self.config.get(
@@ -128,6 +134,7 @@ class RuleBasedScorer:
         subtask: SubTask,
         resource: ResourceNode,
         current_time: float = 0.0,
+        transfer: DataTransferEstimate | None = None,
     ) -> MatchEntry:
         """计算一个矩阵单元格。
 
@@ -137,7 +144,7 @@ class RuleBasedScorer:
         # 先计算原始物理量，再统一归一化，保证不同量纲可以加权组合。
         quality_score = self._quality_score(subtask, resource)
         distance = _distance(subtask.location, resource.location)
-        estimate = self.estimate_execution(subtask, resource, current_time)
+        estimate = self.estimate_execution(subtask, resource, current_time, transfer)
         latency = estimate.latency
         energy = estimate.energy
         distance_cost = self._normalize(distance, "max_distance")
@@ -146,13 +153,13 @@ class RuleBasedScorer:
         load_cost = self._normalize(resource.queue_length, "max_queue_length")
         priority_score = self._normalize(subtask.priority, "max_priority")
 
-        feasible = self._is_feasible(
+        feasible = (transfer is None or transfer.feasible) and self._is_feasible(
             subtask=subtask,
             resource=resource,
             quality_score=quality_score,
             distance=distance,
             latency=latency,
-            energy=energy,
+            energy=energy - (transfer.energy if transfer is not None else 0.0),
             current_time=current_time,
         )
 
@@ -185,14 +192,23 @@ class RuleBasedScorer:
         subtask: SubTask,
         resource: ResourceNode,
         current_time: float = 0.0,
+        transfer: DataTransferEstimate | None = None,
     ) -> ExecutionEstimate:
         """返回执行阶段可复用的原始时延和能耗估计。
 
         MatchMatrix 和 AssignmentExecutor 共用这个入口，保证匹配阶段的
         可行性判断与实际分配后的状态更新采用完全相同的估算公式。
         """
-        latency = self._latency(subtask, resource, current_time)
-        energy = self._energy(subtask, resource, latency)
+        # 仅累计真实需要的跨机传输时延。执行能耗按本机执行阶段计算，
+        # 传输能耗另计入发送节点，避免把传输期间的等待算成本机CPU工作功耗。
+        base_latency = self._latency(
+            subtask, resource, current_time,
+            include_legacy_transmission=not (transfer is not None and transfer.has_data_edges),
+        )
+        latency = base_latency + (transfer.latency if transfer is not None else 0.0)
+        energy = self._energy(subtask, resource, base_latency)
+        if transfer is not None:
+            energy += transfer.energy
         return ExecutionEstimate(latency=latency, energy=energy)
 
     def _quality_score(self, subtask: SubTask, resource: ResourceNode) -> float:
@@ -215,11 +231,13 @@ class RuleBasedScorer:
         return _clamp01(max(qualities) if qualities else 0.0)
 
     def _latency(
-        self, subtask: SubTask, resource: ResourceNode, current_time: float
+        self, subtask: SubTask, resource: ResourceNode, current_time: float,
+        include_legacy_transmission: bool = True,
     ) -> float:
-        """估算总时延 = 等待 + 数据传输 + 基础执行 + 计算。"""
+        """估算总时延 = 等待 + 旧配置的数据传输 + 基础执行 + 计算。"""
         wait_time = max(0.0, resource.release_time - current_time)
-        transmission_time = subtask.data_size / max(resource.link_rate, self._epsilon())
+        transmission_time = (subtask.data_size / max(resource.link_rate, self._epsilon())
+                             if include_legacy_transmission else 0.0)
         compute_time = subtask.compute_cycles / max(
             resource.cpu_frequency, self._epsilon()
         )
@@ -252,7 +270,7 @@ class RuleBasedScorer:
             return False
         if subtask.max_latency > 0 and latency > subtask.max_latency:
             return False
-        if subtask.deadline > 0 and current_time + latency > subtask.deadline:
+        if self.strict_deadlines and subtask.deadline > 0 and current_time + latency > subtask.deadline:
             return False
 
         if subtask.task_type in {"detect", "track", "sense"}:
@@ -260,6 +278,10 @@ class RuleBasedScorer:
             if resource.resource_type != "sensor":
                 return False
             if not subtask.required_modalities_any:
+                return False
+            # A quality threshold of 0 must not turn an unsupported modality
+            # into an executable match. Check actual capability compatibility.
+            if not set(subtask.required_modalities_any).intersection(resource.modalities):
                 return False
             if quality_score < subtask.min_quality:
                 return False
@@ -292,14 +314,21 @@ class MatchMatrixBuilder:
         task_graph: TaskGraph,
         resource_graph: ResourceGraph,
         current_time: float | None = None,
+        state: "SchedulingState | None" = None,
     ) -> MatchMatrix:
+        if state is None and any(edge.data_size_mb > 0 for edge in task_graph.edges):
+            raise ValueError("Explicit data dependencies require SchedulingState for locality checks")
         # 构造矩阵前刷新依赖状态，确保只有当前可执行任务能够 feasible。
         now = resource_graph.timestamp if current_time is None else current_time
         task_graph.update_ready_states(now)
         # entries[i][j] 始终对应 subtask_ids[i] 与 resource_ids[j]。
         entries = [
             [
-                self.scorer.score(subtask, resource, current_time=now)
+                self.scorer.score(
+                    subtask, resource, current_time=now,
+                    transfer=(estimate_data_transfer(state, subtask.subtask_id, resource.resource_id)
+                              if state is not None else None),
+                )
                 for resource in resource_graph.resources
             ]
             for subtask in task_graph.subtasks

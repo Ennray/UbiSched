@@ -14,7 +14,7 @@ from copy import deepcopy
 from dataclasses import dataclass
 import math
 from numbers import Integral
-from typing import Any, Dict, List, Sequence
+from typing import Any, Dict, List, Sequence, Mapping
 
 from ubisched.graph.action_mask import ActionMaskBuilder
 from ubisched.graph.match_matrix import RuleBasedScorer
@@ -36,6 +36,8 @@ class RewardConfig:
     elapsed_time_cost: float = 0.02
     invalid_action: float = -0.5
     stalled: float = -1.0
+    late_fixed_penalty: float = 0.0  # 第八阶段可选，完成晚于截止时间时扣除
+    late_time_penalty: float = 0.0   # 每超期一秒的额外代价
 
 
 class SchedulerEnv:
@@ -225,6 +227,17 @@ class SchedulerEnv:
         if completed:
             reward_parts["completion"] = completion_reward
             reward += completion_reward
+            late_loss = 0.0
+            for item in completed:
+                task = state.get_subtask(item.subtask_id)
+                if task.deadline > 0 and item.actual_end_time is not None:
+                    overdue = max(0.0, item.actual_end_time - task.deadline)
+                    if overdue > 0:
+                        late_loss += (self.rewards.late_fixed_penalty
+                                      + self.rewards.late_time_penalty * overdue)
+            if late_loss:
+                reward_parts["lateness"] = -late_loss
+                reward -= late_loss
 
         if self._all_finished():
             self.terminated = True
@@ -242,10 +255,16 @@ class SchedulerEnv:
         })
         return self.observe(), reward, self.terminated, self.truncated, info
 
-    def add_subtask(self, subtask: SubTask, predecessors: Sequence[str] = ()) -> None:
+    def add_subtask(self, subtask: SubTask, predecessors: Sequence[str] = (),
+                    predecessor_data_sizes: Mapping[str, float] | None = None) -> None:
         """运行中注入新子任务。训练阶段的随机到达事件仍需后续单独建模。"""
         state = self._require_running()
-        state.add_subtask(subtask, predecessors)
+        state.add_subtask(subtask, predecessors, predecessor_data_sizes)
+
+    def set_link_online(self, source_uav_id: str, target_uav_id: str, online: bool) -> None:
+        """运行期间注入 UAV 间通信故障/恢复事件。"""
+        state = self._require_running()
+        return self.executor.set_link_online(state, source_uav_id, target_uav_id, online)
 
     def fail_resource(
         self, resource_id: str, *, retry_task: bool = True

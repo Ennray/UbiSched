@@ -1,0 +1,19 @@
+{
+  "train_episodes": 500,
+  "train_seeds": [
+    11,
+    29,
+    47
+  ],
+  "eval_scenarios_per_type": 30,
+  "batch_size": 4,
+  "ppo_epochs": 3,
+  "lr": 0.0003,
+  "scenarios": [
+    "normal",
+    "urgent",
+    "staggered"
+  ],
+  "eval_seed_start": 500000,
+  "algorithm": "stage3 MLP-MAPPO, deterministic argmax evaluation"
+}

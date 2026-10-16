@@ -40,7 +40,7 @@ int main(int argc,char *argv[]) {
 
     thread t[threadCount];
     auto CRM = ContextRenewManager::GetInst();
-    auto Engine = CapEngine::GetInst();
+    auto Engine = CapEngine::GetInst();-
     t[0] = thread(&ContextRenewManager::serverGetEnvData,CRM);
     t[1] = thread(&CapEngine::run,Engine);
     // t[2] = thread(&ContextRenewManager::serverGetPosData,CRM);

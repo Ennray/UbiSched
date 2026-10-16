@@ -1,4 +1,6 @@
 #include "CapAdaptiveManager.h"
+#include "UbiSchedBridgeClient.h"
+#include "UbiSchedStructuredClient.h"
 
 #include <iostream>
 #include <map>
@@ -24,6 +26,10 @@ void CapAdaptiveManager::run() {
         cerr << "capNeedTB is not built" << endl;
         return;
     }
+
+    // Do not redispatch the previous cycle's result when a selector fails.
+    delete resourceCapAllocatedTB;
+    resourceCapAllocatedTB = new CapabilityAllocated();
 
     auto pm = PluginMgr::GetInstance();
 
@@ -63,6 +69,40 @@ void CapAdaptiveManager::run() {
     } else {
         printf("[Warning] Failed to load libAssessPlugin.so. Checked paths:\n\r");
         for (const auto& p : assessSearchPaths) printf("  - %s\n\r", p.c_str());
+    }
+
+    // Stage 12: opt-in UbiSched bridge, positioned after the existing assessment.
+    // Keep the original SelectPlugin unchanged as the timeout/error fallback.
+    extern int UAVid;
+    if (UbiSchedBridgeClient::enabled()) {
+        int bridgeTask = -1;
+        int bridgeSensor = -1;
+        // Prefer externally supplied structured snapshot when explicitly enabled.
+        // The producer of UBISCHED_STRUCTURED_STATE_FILE is separate; until ROS
+        // publishes it, original numeric bridge and old selector still work.
+        const char* structuredPath = std::getenv("UBISCHED_STRUCTURED_STATE_FILE");
+        bool structuredRequested = structuredPath != NULL && *structuredPath;
+        UbiSchedBridgeClient::Result bridgeResult = structuredRequested
+            ? UbiSchedStructuredClient::request(UAVid, obs0, structuredPath,
+                                                  bridgeTask, bridgeSensor)
+            : UbiSchedBridgeClient::request(UAVid, obs0, bridgeTask, bridgeSensor);
+        if (bridgeResult == UbiSchedBridgeClient::ASSIGNED) {
+            map<int, int> allocation;
+            allocation[bridgeTask] = bridgeSensor;
+            // The following CapDispatchManager::run() keeps its original UDP format.
+            delete resourceCapAllocatedTB;
+            resourceCapAllocatedTB = new CapabilityAllocated(allocation);
+            cout << "[UbiSchedBridge] assigned task=" << bridgeTask
+                 << " sensor=" << bridgeSensor << endl;
+            return;
+        }
+        if (bridgeResult == UbiSchedBridgeClient::NO_ASSIGNMENT) {
+            delete resourceCapAllocatedTB;
+            resourceCapAllocatedTB = new CapabilityAllocated();
+            cout << "[UbiSchedBridge] no feasible assignment" << endl;
+            return;
+        }
+        cerr << "[UbiSchedBridge] timeout/invalid response; falling back to legacy select" << endl;
     }
 
     vector<string> selectSearchPaths = {
@@ -142,6 +182,7 @@ void CapAdaptiveManager::run() {
             map<int, int> res;
             res[(int)actions0[0]] = (int)actions0[1];
             cout << "cont: " << (int)actions0[0] << ' ' << res[(int)actions0[0]] << endl;
+            delete resourceCapAllocatedTB;
             resourceCapAllocatedTB = new CapabilityAllocated(res);
         }
     } else {

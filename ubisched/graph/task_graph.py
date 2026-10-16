@@ -11,7 +11,7 @@ TaskGraph 负责保存这些子任务和依赖关系，并根据前序任务是�
 import json
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Dict, List, Sequence
+from typing import Any, Dict, List, Sequence, Mapping
 
 
 def _load_structured_file(path: str | Path) -> Dict[str, Any]:
@@ -84,6 +84,8 @@ class TaskEdge:
     src_subtask_id: str
     dst_subtask_id: str
     edge_type: str = "precedence"
+    # 此依赖边需要从前序执行节点传递的数据量，单位 MB；默认 0 兼容既有任务图。
+    data_size_mb: float = 0.0
 
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> "TaskEdge":
@@ -91,10 +93,14 @@ class TaskEdge:
         edge_type = str(data.get("edge_type", "precedence"))
         if edge_type != "precedence":
             raise ValueError(f"Unsupported task edge type: {edge_type}")
+        data_size_mb = float(data.get("data_size_mb", 0.0))
+        if not 0 <= data_size_mb < float("inf"):
+            raise ValueError("data_size_mb must be a finite non-negative value")
         return cls(
             src_subtask_id=str(data["src_subtask_id"]),
             dst_subtask_id=str(data["dst_subtask_id"]),
             edge_type=edge_type,
+            data_size_mb=data_size_mb,
         )
 
 
@@ -128,7 +134,8 @@ class TaskGraph:
                 return subtask
         raise KeyError(f"Unknown subtask_id: {subtask_id}")
 
-    def add_subtask(self, subtask: SubTask, predecessors: Sequence[str] = ()) -> None:
+    def add_subtask(self, subtask: SubTask, predecessors: Sequence[str] = (),
+                    predecessor_data_sizes: Mapping[str, float] | None = None) -> None:
         """在运行中注入一个新任务；只允许连接到已经存在的前序任务。
 
         该接口用于追加到达的子任务，不修改已有任务的先后关系。
@@ -145,10 +152,16 @@ class TaskGraph:
         if missing:
             raise ValueError(f"Unknown predecessor(s): {missing}")
 
+        sizes = dict(predecessor_data_sizes or {})
+        if not set(sizes).issubset(set(predecessors)):
+            raise ValueError("predecessor_data_sizes references unknown predecessors")
+        if any(not 0 <= float(v) < float("inf") for v in sizes.values()):
+            raise ValueError("predecessor data sizes must be finite and non-negative")
         subtask.state = "pending"  # 统一由运行时和依赖判断其可执行时刻
         self.subtasks.append(subtask)
         self.edges.extend(
-            TaskEdge(src_subtask_id=src, dst_subtask_id=subtask.subtask_id)
+            TaskEdge(src_subtask_id=src, dst_subtask_id=subtask.subtask_id,
+                     data_size_mb=float(sizes.get(src, 0.0)))
             for src in predecessors
         )
 

@@ -5,12 +5,13 @@ from __future__ import annotations
 from typing import List
 
 from ubisched.graph.action_mask import ActionMask, ActionMaskBuilder
+from ubisched.graph.data_transfer import estimate_data_transfer
 from ubisched.graph.match_matrix import (
     MatchMatrix,
     MatchMatrixBuilder,
     RuleBasedScorer,
 )
-from ubisched.scheduling.scheduling_state import AssignmentRecord, SchedulingState
+from ubisched.scheduling.scheduling_state import AssignmentRecord, SchedulingState, TransferReservation
 
 
 class AssignmentExecutor:
@@ -27,7 +28,14 @@ class AssignmentExecutor:
             state.task_graph,
             state.resource_graph,
             current_time=state.now,
+            state=state,
         )
+
+    def score_assignment(self, state: SchedulingState, subtask_id: str, resource_id: str):
+        task = state.get_subtask(subtask_id)
+        resource = state.get_resource(resource_id)
+        transfer = estimate_data_transfer(state, subtask_id, resource_id)
+        return self.scorer.score(task, resource, state.now, transfer)
 
     def build_action_mask(self, state: SchedulingState) -> ActionMask:
         """根据当前匹配矩阵重新生成动作掩码。"""
@@ -46,13 +54,14 @@ class AssignmentExecutor:
         """
         subtask = state.get_subtask(subtask_id)
         resource = state.get_resource(resource_id)
-        match_entry = self.scorer.score(subtask, resource, state.now)
+        transfer = estimate_data_transfer(state, subtask_id, resource_id)
+        match_entry = self.scorer.score(subtask, resource, state.now, transfer)
         if not match_entry.feasible:
             raise ValueError(
                 f"Infeasible assignment: assign({subtask_id}, {resource_id})"
             )
 
-        estimate = self.scorer.estimate_execution(subtask, resource, state.now)
+        estimate = self.scorer.estimate_execution(subtask, resource, state.now, transfer)
         completion_time = state.now + estimate.latency
         record = AssignmentRecord(
             subtask_id=subtask_id,
@@ -62,14 +71,35 @@ class AssignmentExecutor:
             estimated_latency=estimate.latency,
             estimated_energy=estimate.energy,
             estimated_quality=match_entry.quality_score,
+            communication_latency=transfer.latency,
+            communication_energy=transfer.energy,
+            communication_hops=list(transfer.hops),
+            communication_queue_wait=transfer.queue_wait_s,
+            compute_start_time=state.now + transfer.latency,
         )
 
         subtask.state = "running"
         resource.occupied = True
         resource.release_time = completion_time
+        # 本地执行能耗扣执行资源，通信发送能耗扣源资源。
+        # 与 estimated_energy 的合计保持一致，避免重复扣费。
         resource.remaining_energy = max(
-            0.0, resource.remaining_energy - estimate.energy
+            0.0, resource.remaining_energy - (estimate.energy - transfer.energy)
         )
+        for source_id, cost in transfer.source_energy_debits.items():
+            source_resource = state.get_resource(source_id)
+            source_resource.remaining_energy = max(0.0, source_resource.remaining_energy - cost)
+        # 只有分配成功才真正占用链路时段；匹配和观测不产生副作用。
+        for hop in transfer.hops:
+            state.transfer_reservations.append(TransferReservation(
+                subtask_id=subtask_id, resource_id=resource_id,
+                source_resource_id=hop.source_resource_id,
+                source_uav_id=hop.source_uav_id,
+                target_uav_id=hop.target_uav_id,
+                start_time=hop.start_time, end_time=hop.end_time,
+                data_size_mb=hop.data_size_mb, energy=hop.energy,
+                status=('transferring' if hop.start_time <= state.now else 'queued'),
+            ))
         state.assignments.append(record)
         return record
 
@@ -84,6 +114,15 @@ class AssignmentExecutor:
 
         state.current_time = float(new_time)
         state.resource_graph.timestamp = state.now
+        for transfer in state.transfer_reservations:
+            if transfer.status == "cancelled":
+                continue
+            if transfer.end_time <= state.now + 1e-9:
+                transfer.status = "finished"
+            elif transfer.start_time <= state.now + 1e-9:
+                transfer.status = "transferring"
+            else:
+                transfer.status = "queued"
         completed: List[AssignmentRecord] = []
 
         for assignment in state.active_assignments():
@@ -125,11 +164,51 @@ class AssignmentExecutor:
             assignment.status = "failed"
             assignment.actual_end_time = state.now
             assignment.failure_reason = reason
+            self._cancel_transfers(state, assignment.subtask_id, assignment.resource_id)
             subtask = state.get_subtask(assignment.subtask_id)
             subtask.state = "pending" if retry_task else "failed"
             interrupted.append(assignment)
         resource.occupied = False
         resource.release_time = state.now
+        state.task_graph.update_ready_states(state.now)
+        return interrupted
+
+    @staticmethod
+    def _cancel_transfers(state: SchedulingState, subtask_id: str,
+                          resource_id: str) -> None:
+        for transfer in state.transfer_reservations:
+            if (transfer.subtask_id == subtask_id
+                and transfer.resource_id == resource_id
+                and transfer.status not in {"finished", "cancelled"}):
+                transfer.status = "cancelled"
+
+    def set_link_online(self, state: SchedulingState, source_uav_id: str,
+                        target_uav_id: str, online: bool,
+                        *, retry_task: bool = True) -> List[AssignmentRecord]:
+        """断链中断未传完的任务；已结束传输的计算任务继续运行。"""
+        state.resource_graph.set_link_online(source_uav_id, target_uav_id, online)
+        if online:
+            return []
+        affected = {(r.subtask_id, r.resource_id)
+                    for r in state.transfer_reservations
+                    if r.source_uav_id == source_uav_id
+                    and r.target_uav_id == target_uav_id
+                    and r.end_time > state.now + 1e-9
+                    and r.status != "cancelled"}
+        interrupted = []
+        for assignment in state.active_assignments():
+            if (assignment.subtask_id, assignment.resource_id) not in affected:
+                continue
+            assignment.status = "failed"
+            assignment.actual_end_time = state.now
+            assignment.failure_reason = "link_offline"
+            self._cancel_transfers(state, assignment.subtask_id, assignment.resource_id)
+            resource = state.get_resource(assignment.resource_id)
+            resource.occupied = False
+            resource.release_time = state.now
+            subtask = state.get_subtask(assignment.subtask_id)
+            subtask.state = "pending" if retry_task else "failed"
+            interrupted.append(assignment)
         state.task_graph.update_ready_states(state.now)
         return interrupted
 
@@ -149,6 +228,18 @@ class AssignmentExecutor:
             for task in state.task_graph.subtasks
             if task.state in {"pending", "ready"} and task.arrival_time > state.now
         )
+        return min(future) if future else None
+
+    def next_communication_event_time(self, state: SchedulingState) -> float | None:
+        """仅返回最近的传输开始或完成事件，不改变旧调度循环的事件语义。"""
+        future = []
+        for transfer in state.transfer_reservations:
+            if transfer.status in {"cancelled", "finished"}:
+                continue
+            if transfer.start_time > state.now + 1e-9:
+                future.append(transfer.start_time)
+            if transfer.end_time > state.now + 1e-9:
+                future.append(transfer.end_time)
         return min(future) if future else None
 
     def advance_to_next_event(
