@@ -14,6 +14,7 @@ from ubisched.graph.resource_graph import ResourceGraph
 from ubisched.graph.match_matrix import RuleBasedScorer
 from ubisched.scheduling.multi_agent_env import MultiAgentSchedulerEnv
 from ubisched.scheduling.scheduler_env import RewardConfig
+from ubisched.config import make_scorer, make_env
 
 NETWORK_CONDITIONS = ("fast", "slow", "outage", "contended")
 # contended 是受限资源压力测试，其余三种场景仅改变 UAV1->UAV2 链路。
@@ -77,24 +78,11 @@ def build_integrated_case(seed: int, *, condition: str = "fast", pairs: int = 3)
     rng.shuffle(tasks)  # 避免策略记忆固定输入位置。
     task_graph = TaskGraph.from_dict({"task_graph_id": f"mixed_{seed}",
                                      "subtasks": tasks, "edges": edges})
-    scorer = RuleBasedScorer({
-        "strict_deadlines": False,
-        "normalization": {"max_latency": 40, "max_energy": 500,
-                          "max_cpu_frequency": 10, "max_queue_length": 10,
-                          "max_distance": 100, "max_priority": 10},
-        "defaults": {"task_type_base_time": {"sense": 1.0, "classify": 0.0}},
-        "match_weights": {"quality": 0.38, "latency": 0.52,
-                          "energy": 0.06, "priority": 0.04},
-    })
+    scorer = make_scorer()
     return task_graph, graph, scorer
 
 
 def make_integrated_env(seed: int, *, condition: str = "fast", pairs: int = 3,
-                        max_steps: int = 90) -> MultiAgentSchedulerEnv:
+                        max_steps: int = 90, critical_path: bool = False) -> MultiAgentSchedulerEnv:
     tasks, resources, scorer = build_integrated_case(seed, condition=condition, pairs=pairs)
-    return MultiAgentSchedulerEnv(
-        tasks, resources, scorer, max_tasks=8, max_resources_per_uav=3,
-        max_agents=3, max_steps=max_steps, include_deadline_features=True,
-        include_dependency_features=True,
-        reward_config=RewardConfig(late_fixed_penalty=0.3, late_time_penalty=0.05),
-    )
+    return make_env(tasks, resources, max_steps=max_steps, critical_path=critical_path)

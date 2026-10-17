@@ -1,0 +1,14 @@
+{
+  "notice": "MOCK ONLY. Does not capture images, run recognition or control AirSim.",
+  "url": "http://127.0.0.1:18767/v2/rpc",
+  "uav_id": "UAV3",
+  "worker_id": "mock-UAV3",
+  "database": "../../.ubisched/worker_UAV3.sqlite3",
+  "timeout": 25,
+  "executors": {
+    "cpu_backup": [
+      "python",
+      "scripts/mock_executor.py"
+    ]
+  }
+}

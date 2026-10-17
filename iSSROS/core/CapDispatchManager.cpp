@@ -9,6 +9,7 @@
 #include <sys/socket.h>
 #include <arpa/inet.h>
 #include <cstring>
+#include <unistd.h>
 #include "../CapInterface/CapInterfaceManager.h"
 #include <string>
 
@@ -93,6 +94,8 @@ void CapDispatchManager::run(CapabilityAllocated *capAllocated) {
 
     send_num = sendto(sock_fd, send_buf, strlen(send_buf), 0, (struct sockaddr *)&addr_serv, len);
 
+    close(sock_fd);
+    for (auto resource : resources) delete resource;
     if(send_num < 0)
     {
         perror("sendto error:");

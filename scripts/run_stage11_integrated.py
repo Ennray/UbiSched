@@ -16,13 +16,16 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
+from ubisched.config import observation_contract, contract_hash
 from ubisched.algorithms.mappo_baseline import MAPPOBaseline
-from ubisched.algorithms.transformer_mappo import DependencyAwareTransformerMAPPO
+from ubisched.algorithms.transformer_mappo import (TransformerMAPPO, DependencyAwareTransformerMAPPO,
+                                                  CriticalPathTransformerMAPPO)
 from ubisched.experiments.evaluation import POLICIES, choose_rule_actions, run_episode
 from ubisched.experiments.integrated_scenario import NETWORK_CONDITIONS, make_integrated_env
 
-MODELS = {"mappo_mlp": MAPPOBaseline,
-          "mappo_dependency_transformer": DependencyAwareTransformerMAPPO}
+MODELS = {"mappo_mlp": MAPPOBaseline, "mappo_transformer": TransformerMAPPO,
+          "mappo_dependency_transformer": DependencyAwareTransformerMAPPO,
+          "mappo_critical_path_transformer": CriticalPathTransformerMAPPO}
 MEASURES = ("completion_rate", "deadline_met_rate", "reward", "makespan",
             "total_energy", "conflicts", "remote_computes", "local_computes",
             "communication_queue_wait", "transmission_count", "total_lateness")
@@ -39,7 +42,8 @@ def write_csv(path: Path, rows: list[dict]) -> None:
 
 
 def evaluate(policy: str, case_seed: int, condition: str, *, algo=None, train_seed=None):
-    env = make_integrated_env(case_seed, condition=condition)
+    env = make_integrated_env(case_seed, condition=condition,
+                              critical_path=getattr(algo, "actor_kind", "") == "critical_path_transformer")
     rng = random.Random(case_seed + 101)
     if algo is None:
         fn = lambda e, obs: choose_rule_actions(e, obs, policy=policy, rng=rng)
@@ -103,6 +107,7 @@ def cross_seed_summary(records):
 
 def main(argv=None):
     parser=argparse.ArgumentParser(description='UbiSched 感算协同端到端仿真基准')
+    parser.add_argument('--models',default='mappo_mlp,mappo_dependency_transformer')
     parser.add_argument('--train-episodes',type=int,default=60)
     parser.add_argument('--train-seeds',default='11,29,47')
     parser.add_argument('--eval-cases',type=int,default=12)
@@ -120,6 +125,10 @@ def main(argv=None):
     seeds=[int(part.strip()) for part in args.train_seeds.split(',') if part.strip()]
     if not seeds or len(seeds)!=len(set(seeds)):
         parser.error('必须提供不重复的训练随机种子')
+    selected = [name.strip() for name in args.models.split(',') if name.strip()]
+    if not selected or len(selected) != len(set(selected)) or any(name not in MODELS for name in selected):
+        parser.error('models must be unique known model names')
+    models = {name: MODELS[name] for name in selected}
     import torch
     torch.set_num_threads(1)
     args.output_dir.mkdir(parents=True,exist_ok=True)
@@ -129,7 +138,7 @@ def main(argv=None):
             "train_conditions":NETWORK_CONDITIONS,
             "eval_conditions":NETWORK_CONDITIONS,
             "test_seeds":[910000+i for i in range(args.eval_cases)],
-            "model_names":list(MODELS),"rule_names":list(POLICIES),
+            "model_names":list(models),"rule_names":list(POLICIES),
             "batch_size":args.batch_size,"ppo_epochs":args.ppo_epochs,
             "hidden":args.hidden,"heads":args.heads,"layers":args.layers,
             "deadline_model":"soft deadlines; late completions recorded",
@@ -146,7 +155,7 @@ def main(argv=None):
         write_csv(args.output_dir/'training_log.csv',logs)
         (args.output_dir/'progress.json').write_text(
             json.dumps({"finished":finished,"completed_model_runs":complete,
-                        "expected_model_runs":len(seeds)*len(MODELS)},ensure_ascii=False,indent=2),
+                        "expected_model_runs":len(seeds)*len(models)},ensure_ascii=False,indent=2),
             encoding='utf-8')
     for condition,s in cases:
         for policy in POLICIES:
@@ -157,15 +166,15 @@ def main(argv=None):
         # 两种模型完全共享训练场景顺序；测试集与训练集种子隔离。
         training_cases=[(training_rng.randint(0,200000), training_rng.choice(NETWORK_CONDITIONS))
                         for _ in range(args.train_episodes)]
-        for name, model_class in MODELS.items():
+        for name, model_class in models.items():
             random.seed(train_seed)
             torch.manual_seed(train_seed)
             params={"hidden":args.hidden,"coordinate_actions":True,"work_conserving":True}
-            if model_class is DependencyAwareTransformerMAPPO:
+            if model_class is not MAPPOBaseline:
                 params.update(heads=args.heads,layers=args.layers)
-            algo=model_class(make_integrated_env(train_seed),**params)
+            algo=model_class(make_integrated_env(train_seed, critical_path=name=="mappo_critical_path_transformer"),**params)
             for offset in range(0,len(training_cases),args.batch_size):
-                batch=[algo.sample_episode(make_integrated_env(s,condition=c))
+                batch=[algo.sample_episode(make_integrated_env(s,condition=c,critical_path=name=="mappo_critical_path_transformer"))
                        for s,c in training_cases[offset:offset+args.batch_size]]
                 stats=algo.update(batch,epochs=args.ppo_epochs)
                 logs.append({"model":name,"train_seed":train_seed,
@@ -177,7 +186,9 @@ def main(argv=None):
             torch.save({"actor":algo.actor.state_dict(),"critic":algo.critic.state_dict(),
                         "model":name,"train_seed":train_seed,
                         "training_episodes":args.train_episodes,
-                        "hidden":args.hidden,"heads":args.heads,"layers":args.layers},
+                        "hidden":args.hidden,"heads":args.heads,"layers":args.layers,
+                        "observation_contract":observation_contract(critical_path=name=="mappo_critical_path_transformer"),
+                        "contract_hash":contract_hash(observation_contract(critical_path=name=="mappo_critical_path_transformer"))},
                        args.output_dir/f'{name}_seed_{train_seed}.pt')
             for condition,s in cases:
                 records.append(evaluate(name,s,condition,algo=algo,train_seed=train_seed))

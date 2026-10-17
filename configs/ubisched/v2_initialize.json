@@ -1,0 +1,328 @@
+{
+  "operation": "initialize",
+  "request_id": "example-initialize-v2",
+  "snapshot": {
+    "version": 2,
+    "snapshot_id": "demo-13",
+    "time": 0,
+    "request_uav_id": "UAV1",
+    "task_graph": {
+      "task_graph_id": "mixed_13",
+      "subtasks": [
+        {
+          "subtask_id": "capture_2",
+          "task_type": "sense",
+          "priority": 9.0,
+          "deadline": 6.0,
+          "location": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "required_modalities_any": [
+            "rgb"
+          ],
+          "min_quality": 0.8,
+          "data_size": 0.0,
+          "compute_cycles": 0.0,
+          "max_latency": 15.0,
+          "resource_count_min": 1,
+          "resource_count_max": 1,
+          "state": "pending",
+          "arrival_time": 1.0,
+          "legacy_task_index": 0
+        },
+        {
+          "subtask_id": "infer_1",
+          "task_type": "classify",
+          "priority": 5.0,
+          "deadline": 8.54230835130863,
+          "location": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "required_modalities_any": [],
+          "min_quality": 0.0,
+          "data_size": 0.0,
+          "compute_cycles": 10.665,
+          "max_latency": 30.0,
+          "resource_count_min": 1,
+          "resource_count_max": 1,
+          "state": "pending",
+          "arrival_time": 0.0,
+          "legacy_task_index": 1
+        },
+        {
+          "subtask_id": "infer_2",
+          "task_type": "classify",
+          "priority": 9.0,
+          "deadline": 8.359601631464564,
+          "location": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "required_modalities_any": [],
+          "min_quality": 0.0,
+          "data_size": 0.0,
+          "compute_cycles": 8.521,
+          "max_latency": 30.0,
+          "resource_count_min": 1,
+          "resource_count_max": 1,
+          "state": "pending",
+          "arrival_time": 0.0,
+          "legacy_task_index": 2
+        },
+        {
+          "subtask_id": "capture_0",
+          "task_type": "sense",
+          "priority": 6.0,
+          "deadline": 4.0,
+          "location": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "required_modalities_any": [
+            "rgb"
+          ],
+          "min_quality": 0.8,
+          "data_size": 0.0,
+          "compute_cycles": 0.0,
+          "max_latency": 15.0,
+          "resource_count_min": 1,
+          "resource_count_max": 1,
+          "state": "pending",
+          "arrival_time": 0.0,
+          "legacy_task_index": 3
+        },
+        {
+          "subtask_id": "capture_1",
+          "task_type": "sense",
+          "priority": 5.0,
+          "deadline": 5.0,
+          "location": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "required_modalities_any": [
+            "rgb"
+          ],
+          "min_quality": 0.8,
+          "data_size": 0.0,
+          "compute_cycles": 0.0,
+          "max_latency": 15.0,
+          "resource_count_min": 1,
+          "resource_count_max": 1,
+          "state": "pending",
+          "arrival_time": 0.0,
+          "legacy_task_index": 4
+        },
+        {
+          "subtask_id": "infer_0",
+          "task_type": "classify",
+          "priority": 6.0,
+          "deadline": 7.307016297971282,
+          "location": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "required_modalities_any": [],
+          "min_quality": 0.0,
+          "data_size": 0.0,
+          "compute_cycles": 11.638,
+          "max_latency": 30.0,
+          "resource_count_min": 1,
+          "resource_count_max": 1,
+          "state": "pending",
+          "arrival_time": 0.0,
+          "legacy_task_index": 5
+        }
+      ],
+      "edges": [
+        {
+          "src_subtask_id": "capture_0",
+          "dst_subtask_id": "infer_0",
+          "edge_type": "precedence",
+          "data_size_mb": 9.163
+        },
+        {
+          "src_subtask_id": "capture_1",
+          "dst_subtask_id": "infer_1",
+          "edge_type": "precedence",
+          "data_size_mb": 10.608
+        },
+        {
+          "src_subtask_id": "capture_2",
+          "dst_subtask_id": "infer_2",
+          "edge_type": "precedence",
+          "data_size_mb": 10.936
+        }
+      ],
+      "created_time": 0.0
+    },
+    "resource_graph": {
+      "resource_graph_id": "resources_13_fast",
+      "timestamp": 0.0,
+      "resources": [
+        {
+          "resource_id": "cam_0",
+          "resource_type": "sensor",
+          "owner_uav_id": "UAV1",
+          "location": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "modalities": [
+            "rgb"
+          ],
+          "sensing_quality": {
+            "rgb": 0.87
+          },
+          "detection_range": 0.0,
+          "power": 1.0,
+          "cpu_frequency": 0.0,
+          "queue_length": 0.0,
+          "link_rate": 100.0,
+          "remaining_energy": 300.0,
+          "occupied": false,
+          "release_time": 0.0,
+          "online": true,
+          "legacy_sensor_index": 0
+        },
+        {
+          "resource_id": "cam_1",
+          "resource_type": "sensor",
+          "owner_uav_id": "UAV1",
+          "location": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "modalities": [
+            "rgb"
+          ],
+          "sensing_quality": {
+            "rgb": 0.895
+          },
+          "detection_range": 0.0,
+          "power": 1.0,
+          "cpu_frequency": 0.0,
+          "queue_length": 0.0,
+          "link_rate": 100.0,
+          "remaining_energy": 300.0,
+          "occupied": false,
+          "release_time": 0.0,
+          "online": true,
+          "legacy_sensor_index": 1
+        },
+        {
+          "resource_id": "cpu_local",
+          "resource_type": "compute",
+          "owner_uav_id": "UAV1",
+          "location": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "modalities": [],
+          "sensing_quality": {},
+          "detection_range": 0.0,
+          "power": 1.3,
+          "cpu_frequency": 2.2,
+          "queue_length": 0.0,
+          "link_rate": 0.0,
+          "remaining_energy": 400.0,
+          "occupied": false,
+          "release_time": 0.0,
+          "online": true
+        },
+        {
+          "resource_id": "cpu_fast_a",
+          "resource_type": "compute",
+          "owner_uav_id": "UAV2",
+          "location": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "modalities": [],
+          "sensing_quality": {},
+          "detection_range": 0.0,
+          "power": 1.2,
+          "cpu_frequency": 10.0,
+          "queue_length": 0.0,
+          "link_rate": 0.0,
+          "remaining_energy": 400.0,
+          "occupied": false,
+          "release_time": 0.0,
+          "online": true
+        },
+        {
+          "resource_id": "cpu_fast_b",
+          "resource_type": "compute",
+          "owner_uav_id": "UAV2",
+          "location": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "modalities": [],
+          "sensing_quality": {},
+          "detection_range": 0.0,
+          "power": 1.1,
+          "cpu_frequency": 8.0,
+          "queue_length": 0.0,
+          "link_rate": 0.0,
+          "remaining_energy": 400.0,
+          "occupied": false,
+          "release_time": 0.0,
+          "online": true
+        },
+        {
+          "resource_id": "cpu_backup",
+          "resource_type": "compute",
+          "owner_uav_id": "UAV3",
+          "location": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "modalities": [],
+          "sensing_quality": {},
+          "detection_range": 0.0,
+          "power": 1.2,
+          "cpu_frequency": 4.0,
+          "queue_length": 0.0,
+          "link_rate": 0.0,
+          "remaining_energy": 400.0,
+          "occupied": false,
+          "release_time": 0.0,
+          "online": true
+        }
+      ],
+      "communication_links": [
+        {
+          "source_uav_id": "UAV1",
+          "target_uav_id": "UAV2",
+          "bandwidth_mb_s": 20.0,
+          "latency_s": 0.1,
+          "energy_per_mb": 0.015,
+          "online": true
+        },
+        {
+          "source_uav_id": "UAV1",
+          "target_uav_id": "UAV3",
+          "bandwidth_mb_s": 2.5,
+          "latency_s": 0.1,
+          "energy_per_mb": 0.02,
+          "online": true
+        }
+      ]
+    }
+  }
+}

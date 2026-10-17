@@ -10,12 +10,14 @@ UBI2C returns one backward-compatible legacy sensor selection (when representabl
 import argparse
 from dataclasses import dataclass
 import json
-import math
+import hashlib
+import warnings
 from pathlib import Path
 import socketserver
 from typing import Any
 
-from ubisched.graph.match_matrix import RuleBasedScorer
+from ubisched.config import CAPACITIES, observation_contract, contract_hash
+from ubisched.integration.snapshot import SnapshotError, make_live_env
 from ubisched.graph.resource_graph import ResourceGraph
 from ubisched.graph.task_graph import TaskGraph
 from ubisched.scheduling.scheduling_state import AssignmentRecord, TransferReservation
@@ -23,117 +25,14 @@ from ubisched.scheduling.multi_agent_env import MultiAgentSchedulerEnv
 from ubisched.experiments.evaluation import choose_rule_actions
 
 MAX_PACKET = 48000
-MODELS = {"mappo_mlp": "mappo_mlp", "mappo_dependency_transformer": "mappo_dependency_transformer"}
+MODELS = {name: name for name in ("mappo_mlp", "mappo_transformer",
+          "mappo_dependency_transformer", "mappo_critical_path_transformer")}
 POLICIES = {"greedy_score", "earliest_deadline", *MODELS}
-CAPACITIES = {"max_tasks": 8, "max_resources_per_uav": 3, "max_agents": 3}
-
-
-class SnapshotError(ValueError):
-    pass
-
-
-def _finite_tree(value: Any, path: str = "root") -> None:
-    if isinstance(value, dict):
-        for k, v in value.items():
-            if not isinstance(k, str):
-                raise SnapshotError(f"non-string key: {path}")
-            _finite_tree(v, f"{path}.{k}")
-    elif isinstance(value, list):
-        for i, v in enumerate(value):
-            _finite_tree(v, f"{path}[{i}]")
-    elif isinstance(value, float) and not math.isfinite(value):
-        raise SnapshotError(f"non-finite number: {path}")
-
-
-def _validate_graphs(task_graph: TaskGraph, resource_graph: ResourceGraph) -> None:
-    tids = task_graph.subtask_ids()
-    rids = resource_graph.resource_ids()
-    if not tids or not rids or len(tids) != len(set(tids)) or len(rids) != len(set(rids)):
-        raise SnapshotError("task/resource IDs must be nonempty and unique")
-    if any(not t.subtask_id or t.state not in {"pending", "ready", "running", "finished", "failed"}
-           or t.arrival_time < 0 or t.resource_count_min != 1 or t.resource_count_max != 1
-           for t in task_graph.subtasks):
-        raise SnapshotError("unsupported task state or multi-resource requirement")
-    ids = set(tids)
-    adj = {x: [] for x in tids}
-    indeg = {x: 0 for x in tids}
-    for e in task_graph.edges:
-        if e.src_subtask_id not in ids or e.dst_subtask_id not in ids or e.src_subtask_id == e.dst_subtask_id:
-            raise SnapshotError("edge references missing task or self-loop")
-        adj[e.src_subtask_id].append(e.dst_subtask_id)
-        indeg[e.dst_subtask_id] += 1
-    queue = [t for t, count in indeg.items() if count == 0]
-    visited = 0
-    while queue:
-        cur = queue.pop()
-        visited += 1
-        for nxt in adj[cur]:
-            indeg[nxt] -= 1
-            if indeg[nxt] == 0:
-                queue.append(nxt)
-    if visited != len(tids):
-        raise SnapshotError("task graph contains cycle")
-    if any(not r.owner_uav_id for r in resource_graph.resources):
-        raise SnapshotError("each resource needs owner_uav_id")
-
-
-def make_live_env(snapshot: dict[str, Any]) -> MultiAgentSchedulerEnv:
-    if not isinstance(snapshot, dict) or snapshot.get("version") != 2:
-        raise SnapshotError("expected version=2 snapshot")
-    if "task_graph" not in snapshot or "resource_graph" not in snapshot:
-        raise SnapshotError("missing task_graph/resource_graph")
-    _finite_tree(snapshot)
-    tasks = TaskGraph.from_dict(snapshot["task_graph"])
-    resources = ResourceGraph.from_dict(snapshot["resource_graph"])
-    _validate_graphs(tasks, resources)
-    now = snapshot.get("time", resources.timestamp)
-    if isinstance(now, bool) or not isinstance(now, (int, float)) or not math.isfinite(now) or now < 0:
-        raise SnapshotError("invalid snapshot time")
-    resources.timestamp = float(now)
-    scorer = RuleBasedScorer({
-        "strict_deadlines": False,
-        "normalization": {"max_latency": 120.0, "max_energy": 1000.0,
-                          "max_distance": 1000.0, "max_priority": 10.0,
-                          "max_queue_length": 20.0, "max_cpu_frequency": 15.0},
-    })
-    env = MultiAgentSchedulerEnv(
-        tasks, resources, scorer, max_tasks=CAPACITIES["max_tasks"],
-        max_resources_per_uav=CAPACITIES["max_resources_per_uav"],
-        max_agents=CAPACITIES["max_agents"], include_deadline_features=True,
-        include_dependency_features=True,
-    )
-    env.reset()
-    # A snapshot describes the current authoritative state. These records are
-    # observations from the producer, not events synthesized by our simulator.
-    state = env.state
-    seen_finished = set()
-    for rec in snapshot.get("completed_assignments", []):
-        tid, rid = rec["subtask_id"], rec["resource_id"]
-        task = state.get_subtask(tid)
-        state.get_resource(rid)
-        if task.state != "finished" or tid in seen_finished:
-            raise SnapshotError("completed assignment inconsistent with finished task")
-        seen_finished.add(tid)
-        finish = float(rec.get("end_time", now))
-        if not math.isfinite(finish) or finish > float(now) + 1e-8 or finish < 0:
-            raise SnapshotError("bad completion timestamp")
-        state.assignments.append(AssignmentRecord(tid, rid, finish, finish, 0.0, 0.0,
-                                                   status="finished", actual_end_time=finish))
-    # Existing link reservations must be supplied with observed dates by the
-    # external producer. They are not reconstructed from task IDs.
-    for rec in snapshot.get("transfer_reservations", []):
-        reservation = TransferReservation(**rec)
-        if reservation.start_time > reservation.end_time:
-            raise SnapshotError("invalid transfer reservation time range")
-        state.transfer_reservations.append(reservation)
-    # A completed predecessor carrying data cannot be routed without the
-    # source resource identity; return an error instead of fabricating it.
-    for edge in tasks.edges:
-        if edge.data_size_mb > 0 and state.get_subtask(edge.src_subtask_id).state == "finished":
-            if edge.src_subtask_id not in seen_finished:
-                raise SnapshotError("missing completed assignment for data predecessor")
-    state.task_graph.update_ready_states(state.now)
-    return env
+# Only these bundled Stage 11 files have a known historical training profile.
+BUNDLED_LEGACY_HASHES = {
+    "85c13f34ca10ea6519bfad16b9ff36d327920512c597f0526e30b8009d427428",
+    "28e4c0fbee35bba93956eeab79ce0770e6929428c0e2f45215053ca3756cfa87",
+}
 
 
 @dataclass
@@ -142,6 +41,8 @@ class ModelPolicy:
     checkpoint: Path | None = None
 
     def __post_init__(self):
+        self.critical_path = self.policy == "mappo_critical_path_transformer"
+        self.contract = observation_contract(critical_path=self.critical_path)
         if self.policy not in POLICIES:
             raise SnapshotError("unknown policy")
         if self.policy in MODELS:
@@ -152,6 +53,14 @@ class ModelPolicy:
             self.weights = torch.load(self.checkpoint, map_location="cpu", weights_only=True)
             if self.weights.get("model") != self.policy:
                 raise SnapshotError("checkpoint model kind mismatch")
+            saved = self.weights.get("observation_contract")
+            if saved is None:
+                digest = hashlib.sha256(self.checkpoint.read_bytes()).hexdigest()
+                if digest not in BUNDLED_LEGACY_HASHES:
+                    raise SnapshotError("checkpoint lacks observation_contract; retrain with current entry")
+                warnings.warn("Bundled Stage 11 smoke checkpoint: using its documented training profile; not a validated model", RuntimeWarning)
+            elif saved != self.contract or self.weights.get("contract_hash") != contract_hash(saved):
+                raise SnapshotError("checkpoint observation contract mismatch")
             self.hidden = int(self.weights["hidden"])
             self.heads = int(self.weights.get("heads", 4))
             self.layers = int(self.weights.get("layers", 1))
@@ -159,17 +68,26 @@ class ModelPolicy:
             self._cached_algo = None
             # Model initialization is done before the UDP server declares itself
             # ready, so the first C++ request is not lost to a cold start.
-            from ubisched.experiments.integrated_scenario import make_integrated_env
-            self._initialize_algo(make_integrated_env(13))
+            # Warm with a minimal schema example, independent of experiment generators.
+            sample = {"version": 2, "time": 0,
+                      "task_graph": {"task_graph_id": "warm", "subtasks": [
+                          {"subtask_id": "warm", "task_type": "sense", "required_modalities_any": ["rgb"]}]},
+                      "resource_graph": {"resource_graph_id": "warm", "resources": [
+                          {"resource_id": "warm", "resource_type": "sensor", "owner_uav_id": "UAV1",
+                           "modalities": ["rgb"], "remaining_energy": 100}]}}
+            self._initialize_algo(make_live_env(sample, critical_path=self.critical_path))
         else:
             self.weights = None
 
     def _initialize_algo(self, env: MultiAgentSchedulerEnv) -> None:
         from ubisched.algorithms.mappo_baseline import MAPPOBaseline
-        from ubisched.algorithms.transformer_mappo import DependencyAwareTransformerMAPPO
-        cls = MAPPOBaseline if self.policy == "mappo_mlp" else DependencyAwareTransformerMAPPO
+        from ubisched.algorithms.transformer_mappo import (
+            TransformerMAPPO, DependencyAwareTransformerMAPPO, CriticalPathTransformerMAPPO)
+        cls = {"mappo_mlp": MAPPOBaseline, "mappo_transformer": TransformerMAPPO,
+               "mappo_dependency_transformer": DependencyAwareTransformerMAPPO,
+               "mappo_critical_path_transformer": CriticalPathTransformerMAPPO}[self.policy]
         params = {"hidden": self.hidden, "coordinate_actions": True, "work_conserving": True}
-        if cls is DependencyAwareTransformerMAPPO:
+        if cls is not MAPPOBaseline:
             params.update(heads=self.heads, layers=self.layers)
         algo = cls(env, **params)
         try:
@@ -184,7 +102,7 @@ class ModelPolicy:
 
     def choose(self, env: MultiAgentSchedulerEnv, observations) -> dict[str, int]:
         if self.weights is None:
-            rule = "greedy_score" if self.policy == "greedy_score" else "edf"
+            rule = "greedy_score" if self.policy == "greedy_score" else "earliest_deadline"
             return choose_rule_actions(env, observations, policy=rule)
         if (env.action_dim, len(env.local_vector(observations[env.agents[0]]))) != self._cached_dim:
             raise SnapshotError("incompatible online observation dimension")
@@ -197,7 +115,7 @@ class StructuredAdapter:
         self.policy = policy
 
     def decide(self, snapshot: dict[str, Any]) -> dict[str, Any]:
-        env = make_live_env(snapshot)
+        env = make_live_env(snapshot, critical_path=self.policy.critical_path)
         request_uav = snapshot.get("request_uav_id")
         if not isinstance(request_uav, str) or request_uav not in env.agents:
             raise SnapshotError("request_uav_id not found in resource owners")
@@ -219,6 +137,9 @@ class StructuredAdapter:
             entry = env.executor.score_assignment(env.state, *label)
             if not entry.feasible:
                 raise SnapshotError("policy returned infeasible task/resource")
+            # Reserve only in this disposable planning copy. This verifies joint
+            # energy/link constraints without changing the caller's snapshot.
+            env.executor.assign(env.state, *label)
             accepted.append({"uav_id": agent, "subtask_id": label[0], "resource_id": label[1],
                              "score": round(entry.match_score, 6)})
         result = {"version": 2, "status": "ok", "policy": self.policy.policy,
@@ -263,7 +184,7 @@ class StructuredAdapter:
                 result = self.decide(snapshot)
                 return self.to_legacy_reply(snapshot, result)
             raise SnapshotError("bad_version")
-        except (SnapshotError, ValueError, KeyError, TypeError, UnicodeError, OverflowError) as exc:
+        except (SnapshotError, ValueError, KeyError, TypeError, UnicodeError, OverflowError, RecursionError) as exc:
             return f"ERR|{type(exc).__name__}:{str(exc)[:90]}".encode("ascii", errors="replace")
 
 

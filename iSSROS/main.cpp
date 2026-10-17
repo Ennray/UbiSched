@@ -13,13 +13,14 @@
 extern int listening_port;
 extern string Uavname;
 extern int UAVid;
-static const int threadCount=3;
+static const int threadCount=2;
 using namespace std;
 int main(int argc,char *argv[]) {
     if (argc < 3) {
         std::cerr << "example: " << argv[0] << " port UAVid(begin from 1)" << std::endl;
         return 1;
     }
+    cout << "Legacy iS2ROS compatibility runtime. New graph entry: python -m ubisched serve" << endl;
     listening_port = stoi(argv[1]);
     UAVid = stoi(argv[2]);
 
@@ -40,14 +41,14 @@ int main(int argc,char *argv[]) {
 
     thread t[threadCount];
     auto CRM = ContextRenewManager::GetInst();
-    auto Engine = CapEngine::GetInst();-
+    auto Engine = CapEngine::GetInst();
     t[0] = thread(&ContextRenewManager::serverGetEnvData,CRM);
     t[1] = thread(&CapEngine::run,Engine);
     // t[2] = thread(&ContextRenewManager::serverGetPosData,CRM);
 
 
     for (int i = 0; i < threadCount; ++i) {
-        t[i].join();
+        if (t[i].joinable()) t[i].join();
     }
 //    pause();
     return 0;

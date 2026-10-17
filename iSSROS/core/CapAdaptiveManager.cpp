@@ -102,7 +102,12 @@ void CapAdaptiveManager::run() {
             cout << "[UbiSchedBridge] no feasible assignment" << endl;
             return;
         }
-        cerr << "[UbiSchedBridge] timeout/invalid response; falling back to legacy select" << endl;
+        const char* fallback = std::getenv("UBISCHED_LEGACY_FALLBACK");
+        if (!fallback || std::string(fallback) != "1") {
+            cerr << "[UbiSchedBridge] request failed; no dispatch. Set UBISCHED_LEGACY_FALLBACK=1 for explicit legacy fallback" << endl;
+            return;
+        }
+        cerr << "[UbiSchedBridge] explicit legacy fallback enabled" << endl;
     }
 
     vector<string> selectSearchPaths = {
