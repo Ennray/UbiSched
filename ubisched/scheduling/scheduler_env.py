@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-"""UbiSched 的强化学习环境接口（第二阶段）。
+"""UbiSched 的强化学习环境接口。
 
 这是**单次选择一个任务-资源组合**的离散事件环境，不是 MAPPO 多智能体环境。
 其目的在于使规则/随机/学习策略使用相同的任务、资源、执行器与奖励定义。
@@ -36,7 +36,7 @@ class RewardConfig:
     elapsed_time_cost: float = 0.02
     invalid_action: float = -0.5
     stalled: float = -1.0
-    late_fixed_penalty: float = 0.0  # 第八阶段可选，完成晚于截止时间时扣除
+    late_fixed_penalty: float = 0.0  # 完成晚于截止时间时扣除
     late_time_penalty: float = 0.0   # 每超期一秒的额外代价
 
 
@@ -76,7 +76,7 @@ class SchedulerEnv:
         self._resource_energy_scale = 1.0
 
     def reset(self, *, seed: int | None = None) -> tuple[Dict[str, Any], Dict[str, Any]]:
-        """独立重开一局，不修改初始化传入的图；本阶段无随机事件，seed 仅为兼容接口。"""
+        """独立重开一局，不修改初始化传入的图；随机场景由外部生成，seed 仅为接口参数。"""
         del seed
         self.state = SchedulingState(
             task_graph=deepcopy(self._initial_tasks),
@@ -257,7 +257,7 @@ class SchedulerEnv:
 
     def add_subtask(self, subtask: SubTask, predecessors: Sequence[str] = (),
                     predecessor_data_sizes: Mapping[str, float] | None = None) -> None:
-        """运行中注入新子任务。训练阶段的随机到达事件仍需后续单独建模。"""
+        """运行中注入新子任务。任务的 arrival_time 和前序依赖共同决定就绪时刻。"""
         state = self._require_running()
         state.add_subtask(subtask, predecessors, predecessor_data_sizes)
 

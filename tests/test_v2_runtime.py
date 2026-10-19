@@ -11,7 +11,7 @@ import pytest
 
 from ubisched.experiments.integrated_scenario import make_integrated_env
 from ubisched.integration.snapshot import SnapshotError, make_live_env
-from ubisched.integration.structured_bridge import ModelPolicy, StructuredAdapter
+from ubisched.integration.policy import ModelPolicy, StructuredAdapter
 from ubisched.integration.runtime import RuntimeCoordinator, state_snapshot
 from ubisched.integration.runtime_server import RuntimeServer
 from ubisched.integration.client import RuntimeClient

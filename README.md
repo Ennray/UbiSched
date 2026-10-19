@@ -1,44 +1,62 @@
-# UbiSched 新版图调度
+# UbiSched 精简版
 
-新版唯一命令入口是 `ubisched/__main__.py`。从项目根目录运行 `python -m ubisched`。
-任务图、资源图、MAPPO 推理和执行反馈均可独立运行，不需要先启动旧能力需求管理器或旧选择插件。
+本分支基于 UbiSched v2.1，只保留新版任务图调度、训练评估、HTTP 服务和执行反馈。
+分支名为 `cleanup/new-runtime`，原始快照保存在 `archive/v2.1-original`。
 
-## 安装与快速检查
+## 目录
 
-Python 3.10 及以上。建议在单独的虚拟环境中安装。
+| 路径 | 职责 |
+| --- | --- |
+| `ubisched/__main__.py` | 唯一命令入口 |
+| `ubisched/config.py` | 容量、单位、评分和模型输入约定 |
+| `ubisched/graph/` | 任务图、资源图、匹配、依赖和通信代价 |
+| `ubisched/scheduling/` | 调度状态、资源占用、仿真环境和动作约束 |
+| `ubisched/algorithms/` | 四种 MAPPO 模型 |
+| `ubisched/integration/policy.py` | 模型加载和结构化分配建议 |
+| `ubisched/integration/` 其他文件 | HTTP 服务、数据库、状态生产端和执行端 |
+| `ubisched/training.py` | 统一训练与评估 |
+| `configs/ubisched/` | 当前运行示例与组件测试配置 |
+| `models/` | 两份只用于检查接口的短训练权重 |
+| `scripts/` | 一个完整演示及其模拟执行程序 |
+| `tests/` | 当前组件与端到端回归；`support/` 只供测试使用 |
+| `Docs/` | 当前协议、训练说明、阅读顺序和清理记录 |
+
+## 安装
+
+使用独立的 Python 3.10 及以上环境。以下命令均在项目根目录执行。
 
 ```bash
 python -m pip install -e ".[models,dev]"
 python -m ubisched --help
+```
+
+只运行规则策略和模拟执行，可以用 `python -m pip install -e .`，无需 PyTorch。
+训练和学习策略需要 `models` 依赖；回归测试需要 `dev` 依赖。
+
+## 一条命令检查完整流程
+
+```bash
 python scripts/demo_v2_runtime.py
-python -m pytest tests -q
 ```
 
-演示使用 mock 执行程序，只检查软件流程。它不采集图像、不运行识别模型、不控制无人机。
-演示在临时目录中运行，不覆盖正式运行数据库。新规则服务本身仅依赖 Python 标准库，模型推理需要 PyTorch。
+正常结果为 6 个任务完成、0 个失败、6 条指令，`all_finished` 为 `true`。
+演示使用临时数据库和模拟执行，不控制 AirSim，不采集图像，也不运行识别模型。
 
-## 启动新版
+## 分进程运行
+
+第一个终端启动服务，首次查看过程可明确选择规则策略。
 
 ```bash
-python -m ubisched serve --auto-schedule
+python -m ubisched serve --policy greedy_score --auto-schedule --command-timeout 300
 ```
 
-默认使用任务依赖增强 Transformer 和包内 Stage 11 权重。包内旧权重只训练过 24 回合，启动时会提示它属于接口检查用权重。
-它不代表训练已充分，也不能作为算法优于其他方法的证据。
-
-若暂时只查看运行过程，可以明确选择规则策略。
-
-```bash
-python -m ubisched serve --policy greedy_score --auto-schedule
-```
-
-另开终端，从同一项目根目录初始化示例任务。
+第二个终端提交示例任务和资源。
 
 ```bash
 python -m ubisched request --input configs/ubisched/v2_initialize.json
 ```
 
-再分别启动三个离线示例执行端。
+随后在三个终端分别运行以下命令，所有终端均使用同一 Python 环境和项目根目录。
 
 ```bash
 python -m ubisched worker --config configs/ubisched/worker_UAV1.mock.json
@@ -46,59 +64,52 @@ python -m ubisched worker --config configs/ubisched/worker_UAV2.mock.json
 python -m ubisched worker --config configs/ubisched/worker_UAV3.mock.json
 ```
 
-上面三个命令应在三个终端分别运行。配置里的程序都是 mock，不会启动 AirSim。
-真实执行时，资源与执行程序的绑定方式见 `Docs/V2_RUNTIME_PROTOCOL.md`。
+三个命令分别常驻，不能在同一终端逐条等待完成。初始化后及时启动执行端。
+配置绑定的程序为 `scripts/mock_executor.py`。
 
-默认任务数据库是 `.ubisched/runtime.sqlite3`。相同任务重启服务时使用同一路径，可恢复指令和反馈记录。
-开始另一项任务时，使用新的 `--database` 路径，并为执行端使用新的数据库路径。
-运行中不要删除数据库。已有任务不允许再次 initialize 覆盖，只能用遥测、反馈和新增任务接口更新。
-
-## 查看状态
-
-```python
-from ubisched.integration.client import RuntimeClient
-client = RuntimeClient()
-state = client.call("state")
-print(state["summary"])
-print(state["commands"])
-```
-
-默认只监听本机。多个客户端提交方案时，由同一协调器统一登记任务和资源占用。
-这是一套单协调器的软件实现，不应写成已经完成分布式共识或实机系统验证。
-
-## 单次推理和训练入口
+查看状态。
 
 ```bash
-python -m ubisched infer --snapshot configs/ubisched/structured_snapshot_example.json
-python -m ubisched train --help
+python -c "from ubisched.integration.client import RuntimeClient; print(RuntimeClient().call('state')['summary'])"
 ```
 
-训练脚本支持 `mappo_mlp`、`mappo_transformer`、`mappo_dependency_transformer`、`mappo_critical_path_transformer`。
-通过 `--models` 用逗号指定。默认仍为 MLP 和依赖增强 Transformer。
-新训练权重保存输入约定及校验值，在线加载时进行严格核对。
+默认服务地址为 `http://127.0.0.1:18767/v2/rpc`，数据库为 `.ubisched/runtime.sqlite3`。
+同一次任务恢复时保留服务和 worker 数据库、worker_id。开始新任务时，为服务和三个 worker 分别指定新的数据库路径。
+运行中不要删数据库，已有任务不能再次初始化覆盖。服务和 worker 用 Ctrl+C 正常停止。
 
-训练与在线共用 `ubisched/config.py`。不要单独修改在线归一化参数。
-修改任务特征、归一化方式、动作容量或单位后，应重新训练并使用新数据库。
+## 训练与模型运行
 
-## 新旧代码的位置
+统一入口如下。此命令只检查训练、保存与加载，不用于证明算法效果。
 
-| 目录 | 用途 |
-| --- | --- |
-| `ubisched/` | 新版核心实现 |
-| `scripts/demo_v2_runtime.py` | 新版离线完整演示 |
-| `tests/test_v2_*.py` | 新版协议、恢复和模型接口测试 |
-| `iSSROS/`、`plugins/` | 旧 C++ 运行方式及兼容接口 |
-| `light_mappo-transformer/` | 原有算法工程，不是新版默认模型调用路径 |
-| `Docs/` 中的阶段文档 | 历史说明，当前运行方式以本 README 和 V2 文档为准 |
+```bash
+python -m ubisched train --models mappo_dependency_transformer --train-episodes 40 --train-seeds 11 --eval-cases 2 --output-dir outputs/train_check_01
+```
 
-旧 UBI1/UBI2/UBI2C 接口仍保留。UBI2 是无状态建议接口，新版有状态接口为本地 HTTP `/v2/rpc`。
-UBI2C 只能返回旧传感器编号，不能用于完整的计算任务下发。
-旧 C++ 请求失败时，默认停止本轮下发。只有显式设置 `UBISCHED_LEGACY_FALLBACK=1` 才启用旧算法回退。
+加载刚训练的权重做单次推理。
 
-## 阅读与当前边界
+```bash
+python -m ubisched infer --snapshot configs/ubisched/structured_snapshot_example.json --policy mappo_dependency_transformer --checkpoint outputs/train_check_01/mappo_dependency_transformer_seed_11.pt
+```
 
-从 `Docs/V2_CODE_READING.md` 的第 1 步开始。在线运行、训练、可选算法、实验和兼容代码均已列入清单。
+加载同一权重运行服务。
 
-软件已补齐独立入口、统一配置、状态生产端接口、统一提交、持久化指令、执行反馈和超时处理。
-仍待正式验证的部分是充分训练、多种子对比、消融和规模变化实验，以及 AirSim/真实执行程序接入后的联合验证。
-任务耗时、通信和能耗仍使用估算模型。执行端的实际文件读取和数据传输由绑定程序完成，当前不宣称已经实测通信性能。
+```bash
+python -m ubisched serve --policy mappo_dependency_transformer --checkpoint outputs/train_check_01/mappo_dependency_transformer_seed_11.pt --auto-schedule
+```
+
+`serve --auto-schedule` 未指定策略时仍使用依赖增强模型和包内检查权重。
+`models/smoke_*.pt` 只训练过 24 回合，不能作为正式实验结论。四种模型均保留，详见 [训练说明](Docs/TRAINING.md)。
+
+## 阅读与验证
+
+```bash
+python -m pytest tests -q
+```
+
+- [代码阅读顺序](Docs/CODE_READING.md)
+- [运行与执行端协议](Docs/RUNTIME_PROTOCOL.md)
+- [训练说明](Docs/TRAINING.md)
+- [清理范围与 Git 分支使用](Docs/CLEANUP.md)
+- [本次验证](Docs/VALIDATION.md)
+
+任务耗时、能耗和通信仍为估算模型。真实采集、识别和数据传送需要绑定实际执行程序，后续再与 AirSim 联合验证。

@@ -1,1 +1,1 @@
-"""iS2ROS legacy process compatibility entry points."""
+"""HTTP runtime, structured policy inference, telemetry and execution workers."""

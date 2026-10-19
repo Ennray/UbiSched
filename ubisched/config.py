@@ -21,7 +21,7 @@ UNITS = {"time": "s since mission start", "data": "MB",
 
 
 def observation_contract(*, critical_path=False):
-    # 当前模型的数据参数，包括容量上限、单位、评分和归一化参数、特征维度和排列版本、动作处理设置等Feature order is part of the contract, not just the tensor dimensions.
+    # Feature order is part of the contract, not just the tensor dimensions.
     return {"schema": SCHEMA_VERSION, "capacities": deepcopy(CAPACITIES),
             "units": deepcopy(UNITS), "scoring": deepcopy(SCORING),
             "features": {"task": 16, "resource": 14, "pair": 7,
@@ -43,7 +43,6 @@ def make_scorer():
     return RuleBasedScorer(deepcopy(SCORING))
 
 
-# 创建多智能体环境（任务图、资源图，评分器，容器与特征设置，奖励配置）
 def make_env(tasks, resources, *, critical_path=False, max_steps=90):
     from ubisched.scheduling.multi_agent_env import MultiAgentSchedulerEnv
     from ubisched.scheduling.scheduler_env import RewardConfig

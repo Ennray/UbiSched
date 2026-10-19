@@ -11,7 +11,7 @@ sys.path.insert(0, str(ROOT))
 from ubisched.integration.client import RuntimeClient
 from ubisched.integration.runtime import RuntimeCoordinator
 from ubisched.integration.runtime_server import RuntimeServer
-from ubisched.integration.structured_bridge import ModelPolicy
+from ubisched.integration.policy import ModelPolicy
 from ubisched.integration.worker import ExecutionWorker
 
 
@@ -23,7 +23,7 @@ def main():
         with RuntimeServer(("127.0.0.1", 0), runtime) as server:
             thread = threading.Thread(target=server.serve_forever, daemon=True); thread.start()
             client = RuntimeClient(f"http://127.0.0.1:{server.server_port}/v2/rpc")
-            snapshot = json.loads((ROOT/"configs/ubisched/structured_snapshot_example.json").read_text())
+            snapshot = json.loads((ROOT/"configs/ubisched/structured_snapshot_example.json").read_text(encoding="utf-8"))
             workers = []
             try:
                 client.call("initialize", snapshot=snapshot)

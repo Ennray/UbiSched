@@ -1,4 +1,4 @@
-"""第三阶段：UAV 联合动作、局部观测、全局状态及冲突处理。"""
+"""UAV 联合动作、局部观测、全局状态及冲突处理。"""
 from copy import deepcopy
 from pathlib import Path
 

@@ -7,9 +7,9 @@ import pytest
 def test_all_actor_variants_train_save_and_serve_with_same_contract(tmp_path):
     torch = pytest.importorskip("torch")
     torch.set_num_threads(1)
-    from scripts.run_stage11_integrated import main, MODELS
+    from ubisched.training import main, MODELS
     from ubisched.experiments.integrated_scenario import make_integrated_env
-    from ubisched.integration.structured_bridge import ModelPolicy, StructuredAdapter
+    from ubisched.integration.policy import ModelPolicy, StructuredAdapter
     from ubisched.config import observation_contract
     assert main(["--train-episodes","2", "--train-seeds","11", "--eval-cases","1",
                  "--batch-size","2", "--ppo-epochs","1", "--hidden","16", "--layers","1",

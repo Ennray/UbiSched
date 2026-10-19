@@ -15,7 +15,7 @@ import uuid
 from ubisched.config import contract_hash
 from ubisched.graph.task_graph import SubTask
 from ubisched.integration.snapshot import SnapshotError, identifier, number, finite_tree, make_live_env
-from ubisched.integration.structured_bridge import StructuredAdapter
+from ubisched.integration.policy import StructuredAdapter
 from ubisched.integration.telemetry import assessment_patch
 
 ACTIVE = {"queued", "dispatched", "accepted", "running", "cancelling"}
@@ -27,7 +27,7 @@ def _json(value):
 
 
 def state_snapshot(env, previous):
-    """保留旧编号映射，但不以旧编号作为新版任务和资源身份。"""
+    """序列化任务、资源、分配和通信预约，供持久化及下一轮决策使用。"""
     state = env.state
     result = {"version": 2, "time": state.now, "snapshot_id": previous.get("snapshot_id"),
               "request_uav_id": previous.get("request_uav_id", env.agents[0]),
@@ -35,13 +35,6 @@ def state_snapshot(env, previous):
               "task_graph": asdict(state.task_graph), "resource_graph": asdict(state.resource_graph),
               "completed_assignments": [], "running_assignments": [],
               "transfer_reservations": [asdict(x) for x in state.transfer_reservations]}
-    for group, key, field in (("subtasks", "task_graph", "subtask_id"),
-                              ("resources", "resource_graph", "resource_id")):
-        old = {x[field]: x for x in previous[key][group]}
-        for item in result[key][group]:
-            for name in ("legacy_task_index", "legacy_sensor_index"):
-                if name in old.get(item[field], {}):
-                    item[name] = old[item[field]][name]
     for a in state.assignments:
         if a.status == "finished":
             result["completed_assignments"].append({"subtask_id": a.subtask_id,

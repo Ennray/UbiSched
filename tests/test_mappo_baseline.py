@@ -1,15 +1,11 @@
 """基础 MAPPO 训练测试，不需要真实 AirSim 环境。"""
 import math
-from pathlib import Path
-import sys
 
 import pytest
 
 torch = pytest.importorskip("torch")
 
-ROOT = Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(ROOT / "scripts"))
-from train_mappo_baseline import make_env
+from tests.support.baseline_env import make_env
 from ubisched.algorithms.mappo_baseline import MAPPOBaseline
 
 

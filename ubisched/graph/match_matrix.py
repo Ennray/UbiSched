@@ -203,7 +203,7 @@ class RuleBasedScorer:
         # 传输能耗另计入发送节点，避免把传输期间的等待算成本机CPU工作功耗。
         base_latency = self._latency(
             subtask, resource, current_time,
-            include_legacy_transmission=not (transfer is not None and transfer.has_data_edges),
+            include_input_transmission=not (transfer is not None and transfer.has_data_edges),
         )
         latency = base_latency + (transfer.latency if transfer is not None else 0.0)
         energy = self._energy(subtask, resource, base_latency)
@@ -232,12 +232,12 @@ class RuleBasedScorer:
 
     def _latency(
         self, subtask: SubTask, resource: ResourceNode, current_time: float,
-        include_legacy_transmission: bool = True,
+        include_input_transmission: bool = True,
     ) -> float:
         """估算总时延 = 等待 + 旧配置的数据传输 + 基础执行 + 计算。"""
         wait_time = max(0.0, resource.release_time - current_time)
         transmission_time = (subtask.data_size / max(resource.link_rate, self._epsilon())
-                             if include_legacy_transmission else 0.0)
+                             if include_input_transmission else 0.0)
         compute_time = subtask.compute_cycles / max(
             resource.cpu_frequency, self._epsilon()
         )
@@ -290,7 +290,7 @@ class RuleBasedScorer:
             return True
 
         if resource.resource_type == "compute":
-            # 非感知任务在第一阶段统一视为计算任务。
+            # 非感知任务匹配计算资源。
             return resource.cpu_frequency > 0.0
 
         return False

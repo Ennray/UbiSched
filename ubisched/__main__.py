@@ -8,7 +8,7 @@ from pathlib import Path
 def main(argv=None):
     argv = list(sys.argv[1:] if argv is None else argv)
     if argv and argv[0] == "train":
-        from scripts.run_stage11_integrated import main as train_main
+        from ubisched.training import main as train_main
         return train_main(argv[1:])
     parser = argparse.ArgumentParser(description="UbiSched 新版图调度")
     commands = parser.add_subparsers(dest="command", required=True)
@@ -36,14 +36,14 @@ def main(argv=None):
     train.add_argument("args", nargs=argparse.REMAINDER)
     args = parser.parse_args(argv)
     if args.command == "serve":
-        from ubisched.integration.structured_bridge import ModelPolicy
+        from ubisched.integration.policy import ModelPolicy
         from ubisched.integration.runtime import RuntimeCoordinator
         from ubisched.integration.runtime_server import RuntimeServer
         if not 1 <= args.port <= 65535:
             parser.error("port must be within 1..65535")
         checkpoint = args.checkpoint
         if checkpoint is None and args.policy == "mappo_dependency_transformer":
-            checkpoint = Path(__file__).resolve().parents[1] / "models/stage11_dependency_transformer_seed11.pt"
+            checkpoint = Path(__file__).resolve().parents[1] / "models/smoke_dependency_transformer_seed11.pt"
         coordinator = RuntimeCoordinator(ModelPolicy(args.policy, checkpoint), args.database,
                                          command_timeout=args.command_timeout)
         try:
@@ -69,7 +69,7 @@ def main(argv=None):
         operation = request.pop("operation")
         result = RuntimeClient(args.url).call(operation, **request)
     elif args.command == "infer":
-        from ubisched.integration.structured_bridge import ModelPolicy, StructuredAdapter
+        from ubisched.integration.policy import ModelPolicy, StructuredAdapter
         result = StructuredAdapter(ModelPolicy(args.policy, args.checkpoint)).decide(
             json.loads(args.snapshot.read_text(encoding="utf-8")))
     elif args.command == "worker":
@@ -83,7 +83,7 @@ def main(argv=None):
         finally:
             worker.close()
     else:
-        from scripts.run_stage11_integrated import main as train_main
+        from ubisched.training import main as train_main
         return train_main(args.args)
     print(json.dumps(result, ensure_ascii=False, indent=2))
     return 0

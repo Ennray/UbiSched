@@ -89,7 +89,7 @@ class TaskEdge:
 
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> "TaskEdge":
-        # 第一阶段刻意限制为 precedence，避免把数据流等语义混入当前模型。
+        # 依赖边只支持 precedence，数据量作为该依赖的传输属性。
         edge_type = str(data.get("edge_type", "precedence"))
         if edge_type != "precedence":
             raise ValueError(f"Unsupported task edge type: {edge_type}")
@@ -112,7 +112,6 @@ class TaskGraph:
     edges: List[TaskEdge]
     created_time: float = 0.0
 
-    #分别创建任务节点和依赖边，再放入一个TaskGraph对象中
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> "TaskGraph":
         return cls(

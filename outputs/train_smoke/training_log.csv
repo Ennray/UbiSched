@@ -1,3 +1,0 @@
-﻿model,train_seed,trained_episodes,reward_mean,completion_mean,actor_loss,critic_loss,entropy,samples
-mappo_dependency_transformer,11,4,7.036180253659972,1.0,-0.0006003592861816287,14.30392074584961,0.19909140467643738,41
-mappo_dependency_transformer,11,8,7.289975804998842,1.0,-0.0001050512000801973,15.123510360717773,0.19284555315971375,40

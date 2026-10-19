@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-"""阶段6：结构化任务/资源Transformer Actor，复用第五阶段PPO与全局Critic。
+"""结构化任务与资源 Transformer Actor，复用 MAPPO 更新和全局 Critic。
 
 每个UAV对自己资源作决定，任务数量/资源数量允许在容量上限内变化。
 任务与资源作为独立token，不使用绝对位置编码；非法任务-资源动作仍由环境掩码约束。
@@ -50,7 +50,7 @@ class TaskResourceTransformerActor(nn.Module):
     def _embed_task_nodes(self, tasks: torch.Tensor,
                           structured: Mapping[str, torch.Tensor],
                           task_valid: torch.Tensor) -> torch.Tensor:
-        """预留结构化任务依赖编码扩展点；原第六阶段行为保持不变。"""
+        """基础任务编码，依赖增强模型在此聚合后继信息。"""
         return self.task_embedding(self.scaled_features(tasks))
 
     def forward(self, structured: Mapping[str, torch.Tensor]) -> torch.Tensor:
@@ -181,7 +181,7 @@ class DependencyAwareTaskResourceActor(TaskResourceTransformerActor):
 
 
 class DependencyAwareTransformerMAPPO(TransformerMAPPO):
-    """第七阶段：任务图依赖增强的Transformer-MAPPO。"""
+    """任务图依赖增强的 Transformer-MAPPO。"""
 
     def __init__(self, env: MultiAgentSchedulerEnv, *, hidden: int = 64,
                  heads: int = 4, layers: int = 2, **kwargs):
@@ -213,7 +213,7 @@ class DependencyAwareTransformerMAPPO(TransformerMAPPO):
 
 
 class CriticalPathTaskResourceActor(DependencyAwareTaskResourceActor):
-    """第八阶段：在任务图消息传递结果中融合关键路径的时间预算。"""
+    """在任务图消息传递结果中融合关键路径的时间预算。"""
 
     def __init__(self, *args, critical_dim: int = 6, **kwargs):
         super().__init__(*args, **kwargs)
