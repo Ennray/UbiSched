@@ -1,0 +1,10 @@
+{
+  "finished": true,
+  "completed_model_runs": [
+    {
+      "model": "mappo_dependency_transformer",
+      "seed": 11
+    }
+  ],
+  "expected_model_runs": 1
+}

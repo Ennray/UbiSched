@@ -50,12 +50,14 @@ class MultiAgentSchedulerEnv:
             raise ValueError("Critical path features require dependency features")
         self.max_resources_per_uav = max_resources_per_uav
         self.max_agents = max_agents
+        #保存任务、资源和执行器等公共部分
         self._base = SchedulerEnv(
             task_graph, resource_graph, scorer,
             max_steps=max_steps, reward_config=reward_config,
         )
         owners: Dict[str, List[str]] = {}
         seen_resources: set[str] = set()
+        #遍历全部资源，把属于同一架无人机的资源放到一起
         for resource in resource_graph.resources:
             if not resource.owner_uav_id:
                 raise ValueError(f"Resource {resource.resource_id} has no owner_uav_id")
@@ -63,6 +65,7 @@ class MultiAgentSchedulerEnv:
                 raise ValueError(f"Duplicate resource_id: {resource.resource_id}")
             seen_resources.add(resource.resource_id)
             owners.setdefault(resource.owner_uav_id, []).append(resource.resource_id)
+        #得到智能体列表，以及每个智能体拥有的资源列表
         self.agents = tuple(sorted(owners))
         if not self.agents:
             raise ValueError("Expected at least one UAV with executable resources")
@@ -75,6 +78,7 @@ class MultiAgentSchedulerEnv:
             raise ValueError("Resource count exceeds max_resources_per_uav")
         if len(task_graph.subtasks) > max_tasks:
             raise ValueError("Task count exceeds max_tasks")
+        #确定每个智能体的动作数量
         self.noop_index = max_tasks * max_resources_per_uav
         self.action_dim = self.noop_index + 1
         self._task_feature_dim = 0

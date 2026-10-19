@@ -1,0 +1,39 @@
+{
+  "train_seeds": [
+    11
+  ],
+  "train_episodes": 8,
+  "train_conditions": [
+    "fast",
+    "slow",
+    "outage",
+    "contended"
+  ],
+  "eval_conditions": [
+    "fast",
+    "slow",
+    "outage",
+    "contended"
+  ],
+  "test_seeds": [
+    910000,
+    910001
+  ],
+  "model_names": [
+    "mappo_dependency_transformer"
+  ],
+  "rule_names": [
+    "random_feasible",
+    "greedy_score",
+    "earliest_deadline"
+  ],
+  "batch_size": 4,
+  "ppo_epochs": 2,
+  "hidden": 32,
+  "heads": 4,
+  "layers": 1,
+  "deadline_model": "soft deadlines; late completions recorded",
+  "communication_model": "directed exclusive links, simulated reservations",
+  "stress_case_note": "contended case disables local and backup CPU, isolates single-link contention",
+  "caution": "No real UAV command execution or AirSim measured transmission."
+}

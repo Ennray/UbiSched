@@ -112,6 +112,7 @@ class TaskGraph:
     edges: List[TaskEdge]
     created_time: float = 0.0
 
+    #分别创建任务节点和依赖边，再放入一个TaskGraph对象中
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> "TaskGraph":
         return cls(

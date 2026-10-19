@@ -45,11 +45,13 @@ class ModelPolicy:
         self.contract = observation_contract(critical_path=self.critical_path)
         if self.policy not in POLICIES:
             raise SnapshotError("unknown policy")
+        #分两种情况：1.贪心、最早截止时间等规则，不需要读取模型权重
+        #2.MAPPO系列策略，需要继续加载权重，默认
         if self.policy in MODELS:
             if self.checkpoint is None or not self.checkpoint.is_file():
                 raise SnapshotError("selected model requires existing --checkpoint")
             import torch
-            # Never deserialize arbitrary Python objects from model files.
+            # 确认权重文件存在，将内容读到CPU内存，weight包含模型参数、网络结构设置和训练时保存的数据约定
             self.weights = torch.load(self.checkpoint, map_location="cpu", weights_only=True)
             if self.weights.get("model") != self.policy:
                 raise SnapshotError("checkpoint model kind mismatch")
@@ -61,6 +63,7 @@ class ModelPolicy:
                 warnings.warn("Bundled Stage 11 smoke checkpoint: using its documented training profile; not a validated model", RuntimeWarning)
             elif saved != self.contract or self.weights.get("contract_hash") != contract_hash(saved):
                 raise SnapshotError("checkpoint observation contract mismatch")
+            #读取网络结构设置（网络内部表示的维度、注意力头数、Transformer编码器层数）
             self.hidden = int(self.weights["hidden"])
             self.heads = int(self.weights.get("heads", 4))
             self.layers = int(self.weights.get("layers", 1))

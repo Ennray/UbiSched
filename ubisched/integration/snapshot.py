@@ -124,12 +124,15 @@ def _make_live_env(snapshot, *, critical_path=False):
     number(snapshot["resource_graph"].get("timestamp", 0), "timestamp")
     tasks = TaskGraph.from_dict(snapshot["task_graph"])
     resources = ResourceGraph.from_dict(snapshot["resource_graph"])
+    #检查资源图内容，是否有重复
     _validate_graphs(tasks, resources)
     now = number(snapshot.get("time", resources.timestamp), "time")
     resources.timestamp = now
     # Critical-path features need active records. Initialize the base environment
     # first, restore records, then enable the derived feature branch.
+    # 准备好环境（感知任务的任务图对象、包含无人机的一个传感器的资源图对象，时间）
     env = make_env(tasks, resources, critical_path=False)
+    # 建立运行状态，更新任务是否就绪，然后生成第一份观测
     env.reset(); state = env.state
     if "energy_normalization" in snapshot:
         env._base._resource_energy_scale = number(snapshot["energy_normalization"], "energy_normalization", minimum=1)
