@@ -1,6 +1,8 @@
 """本地 HTTP JSON 接口。部署到其他主机前应由认证网关保护。"""
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import json
+import logging
+from ubisched.integration.event_log import event
 
 MAX_BODY = 1_000_000
 
@@ -27,6 +29,8 @@ class RuntimeHandler(BaseHTTPRequestHandler):
             request = json.loads(self.rfile.read(length))
             result = self.server.coordinator.handle(request)
         except (ValueError, UnicodeError, RecursionError) as exc:
+            event(logging.getLogger("ubisched.http"), "invalid_http_request", "HTTP 请求格式错误",
+                  level=logging.WARNING, peer=self.client_address[0], error=str(exc)[:200])
             result = {"status": "error", "error": str(exc)[:200]}
         raw = json.dumps(result, ensure_ascii=False, allow_nan=False).encode()
         self.send_response(200 if result["status"] == "ok" else 400)

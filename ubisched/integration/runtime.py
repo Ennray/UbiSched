@@ -6,6 +6,7 @@ from copy import deepcopy
 from dataclasses import asdict
 import hashlib
 import json
+import logging
 from pathlib import Path
 import sqlite3
 import threading
@@ -17,6 +18,9 @@ from ubisched.graph.task_graph import SubTask
 from ubisched.integration.snapshot import SnapshotError, identifier, number, finite_tree, make_live_env
 from ubisched.integration.structured_bridge import StructuredAdapter
 from ubisched.integration.telemetry import assessment_patch
+from ubisched.integration.event_log import event, limited_event
+
+LOG = logging.getLogger("ubisched.runtime")
 
 ACTIVE = {"queued", "dispatched", "accepted", "running", "cancelling"}
 FINAL = {"completed", "failed", "cancelled"}
@@ -58,6 +62,7 @@ class RuntimeCoordinator:
 
     def __init__(self, policy, database, *, command_timeout=30.0, retry_interval=2.0, clock=time.time):
         self.adapter = StructuredAdapter(policy)
+        self._log_id = uuid.uuid4().hex
         model_id = hashlib.sha256(policy.checkpoint.read_bytes()).hexdigest() if policy.checkpoint else "rule"
         self.policy_signature = f"{policy.policy}:{model_id}"
         self.timeout = number(command_timeout, "command_timeout", minimum=0.001)
@@ -94,18 +99,87 @@ class RuntimeCoordinator:
                         return json.loads(old[1])
                     row = self.db.execute("SELECT body FROM runtime WHERE id=1").fetchone()
                     doc = json.loads(row[0]) if row else None
+                    before = {k: (v["status"], v.get("attempts", 0)) for k, v in doc["commands"].items()} if doc else {}
                     result, doc = self._execute(request, doc)
                     result.update(status="ok", request_id=rid, revision=doc["revision"])
                     self.db.execute("INSERT OR REPLACE INTO runtime VALUES (1,?)", (_json(doc),))
                     self.db.execute("INSERT INTO receipts VALUES (?,?,?)", (rid, digest, _json(result)))
                     self.db.commit()
+                    # Only report durable results. A failed transaction must not look dispatched.
+                    try:
+                        self._log_committed(request, result, doc, before)
+                    except Exception as exc:
+                        event(LOG, "logging_error", "业务已提交，日志摘要生成失败", level=logging.ERROR, error=str(exc))
                     return result
                 except Exception:
                     self.db.rollback()
                     raise
         except (ValueError, KeyError, TypeError, AttributeError, OverflowError, RecursionError) as exc:
+            op = request.get("operation") if isinstance(request, dict) else None
+            cid = request.get("command_id") if isinstance(request, dict) else None
+            waiting = op == "schedule" and str(exc) == "initialize a mission first"
+            limited_event(LOG, "waiting_initialize" if waiting else "request_rejected",
+                          "等待提交初始任务和资源" if waiting else "请求被拒绝，未提交本次修改",
+                          key=(self._log_id, op, cid, str(exc)), level=logging.INFO if waiting else logging.WARNING,
+                          operation=op, command_id=cid, error=str(exc)[:300])
             return {"status": "error", "request_id": request.get("request_id") if isinstance(request, dict) else None,
                     "error": str(exc)[:300]}
+
+    def _log_committed(self, request, result, doc, before):
+        op = request.get("operation")
+        snapshot = doc["snapshot"]
+        tasks = snapshot["task_graph"]["subtasks"]
+        counts = {state: sum(t["state"] == state for t in tasks)
+                  for state in ("pending", "ready", "running", "finished", "failed")}
+        common = {"mission_time": snapshot["time"], "revision": doc["revision"]}
+        if op == "initialize":
+            event(LOG, "mission_initialized", "已接收任务图和资源图", policy=self.adapter.policy.policy,
+                  tasks=len(tasks), resources=len(snapshot["resource_graph"]["resources"]), **common)
+        for cid, command in doc["commands"].items():
+            fields = {"command_id": cid, "subtask_id": command["subtask_id"],
+                      "resource_id": command["resource_id"], "uav_id": command["uav_id"], **common}
+            if cid not in before:
+                event(LOG, "assignment_committed", "分配已通过复核并保存，等待执行端领取",
+                      plan_id=command["plan_id"], estimated_end_time=command["estimated_end_time"],
+                      estimated_energy=command["estimated_energy"], match_score=command.get("match_score"),
+                      decision_ms=command.get("decision_ms"), **fields)
+            elif command["status"] != before[cid][0]:
+                status = command["status"]
+                label = {"dispatched": "执行端已领取指令", "accepted": "执行端已接受指令",
+                         "running": "已收到执行开始反馈", "completed": "已确认执行完成",
+                         "failed": "已确认执行失败", "cancelled": "已确认停止执行",
+                         "cancelling": "已请求取消，仍等待执行端确认停止"}.get(status, "指令状态变化")
+                level = logging.WARNING if status in {"failed", "cancelling"} else logging.INFO
+                details = {k: command[k] for k in ("worker_id", "actual_start_time", "actual_end_time",
+                           "outputs", "energy_kind", "detail", "cancel_reason") if k in command}
+                if status in FINAL and "actual_start_time" in command:
+                    details["mission_duration_s"] = command["actual_end_time"]-command["actual_start_time"]
+                event(LOG, "command_"+status, label, level=level, status=status, **fields, **details)
+            elif command.get("attempts", 0) != before[cid][1]:
+                event(LOG, "command_redelivered", "重发同一编号指令，执行端须去重",
+                      attempts=command["attempts"], **fields)
+        if op == "plan":
+            event(LOG, "plan_created", "候选方案已生成，尚未提交执行",
+                  allocations=result["plan"]["allocations"], decision_ms=result["plan"]["decision_ms"], **common)
+        if op == "schedule" and not result.get("commands"):
+            if counts["finished"] == len(tasks):
+                message = "全部任务已完成"
+            elif counts["running"]:
+                message = "等待执行反馈，其余任务本轮未分配"
+            elif counts["ready"]:
+                message = "有就绪任务但本轮无分配，需核对资源约束或策略等待动作"
+            elif counts["failed"]:
+                message = "存在失败任务，请检查失败原因及后继依赖"
+            else:
+                message = "等待任务到达或前驱完成"
+            signature = tuple(counts.values())
+            previous = getattr(self, "_idle_signature", None)
+            limited_event(LOG, "schedule_wait", message, key=self._log_id, interval=0 if previous != signature else 30,
+                          **counts, **common)
+            self._idle_signature = signature
+        if op in {"initialize", "commit", "feedback", "retry_task", "cancel", "add_tasks", "add_resources"} or (
+                op == "schedule" and result.get("commands")):
+            event(LOG, "mission_progress", "任务进度", total=len(tasks), **counts, **common)
 
     def _env(self, doc):
         return make_live_env(doc["snapshot"], critical_path=self.adapter.policy.critical_path)
@@ -190,7 +264,8 @@ class RuntimeCoordinator:
                        "estimated_energy": record.estimated_energy,
                        "reserved_execution_energy": record.estimated_energy-record.communication_energy,
                        "estimated_end_time": record.completion_time,
-                       "energy_kind": "estimated", "plan_id": plan["plan_id"]}
+                       "energy_kind": "estimated", "plan_id": plan["plan_id"],
+                       "match_score": allocation.get("score"), "decision_ms": plan.get("decision_ms")}
                 inputs = []
                 for edge in env.state.task_graph.edges:
                     if edge.dst_subtask_id == record.subtask_id:

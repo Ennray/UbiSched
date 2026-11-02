@@ -5,6 +5,7 @@
 """
 from concurrent.futures import ThreadPoolExecutor, as_completed
 import json
+import logging
 import os
 from pathlib import Path
 import signal
@@ -15,6 +16,9 @@ import time
 
 from ubisched.integration.client import RuntimeClient
 from ubisched.integration.snapshot import identifier, number
+from ubisched.integration.event_log import event, limited_event
+
+LOG = logging.getLogger("ubisched.worker")
 
 
 class ExecutionWorker:
@@ -47,11 +51,17 @@ class ExecutionWorker:
         self.db.close()
 
     def _report(self, command_id, result):
-        return self.client.call("feedback", request_id=f"finish-{command_id}", command_id=command_id,
-                                uav_id=self.uav_id, worker_id=self.worker_id, **result)
+        response = self.client.call("feedback", request_id=f"finish-{command_id}", command_id=command_id,
+                                   uav_id=self.uav_id, worker_id=self.worker_id, **result)
+        event(LOG, "feedback_confirmed", "调度器已确认执行结果", command_id=command_id,
+              result=result["result"], uav_id=self.uav_id, worker_id=self.worker_id)
+        return response
 
     def run_once(self):
         response = self.client.call("poll_commands", uav_id=self.uav_id, worker_id=self.worker_id)
+        if not response["commands"]:
+            limited_event(LOG, "worker_wait", "连接正常，等待本无人机的指令", key=self.worker_id,
+                          uav_id=self.uav_id, worker_id=self.worker_id)
         outcomes = []
         pending = []
         def persist_result(cid, result):
@@ -61,11 +71,16 @@ class ExecutionWorker:
             outcomes.append(self._report(cid, result))
         for command in response["commands"]:
             cid = command["command_id"]
+            event(LOG, "command_received", "收到指令", command_id=cid, uav_id=self.uav_id,
+                  subtask_id=command.get("subtask_id"), resource_id=command.get("resource_id"),
+                  operation=command.get("operation"), worker_id=self.worker_id)
             old = self.db.execute("SELECT state,result FROM jobs WHERE command_id=?", (cid,)).fetchone()
             if old:
                 if old[0] == "done":
                     outcomes.append(self._report(cid, json.loads(old[1])))
                 else:
+                    limited_event(LOG, "recovery_required", "上次执行结果未知，不自动重跑", key=cid,
+                                  level=logging.WARNING, command_id=cid, uav_id=self.uav_id)
                     outcomes.append({"command_id": cid, "status": "recovery_required",
                                      "reason": "previous execution outcome unknown; no automatic rerun"})
                 continue
@@ -85,6 +100,17 @@ class ExecutionWorker:
         return outcomes
 
     def _run_program(self, command):
+        started = time.monotonic()
+        fields = {k: command.get(k) for k in ("command_id", "subtask_id", "resource_id", "uav_id")}
+        event(LOG, "execution_started", "开始调用配置绑定的执行程序", **fields,
+              argv=self.executors[command["resource_id"]])
+        result = self._run_program_impl(command)
+        event(LOG, "execution_finished", "本机执行程序已返回结果，等待反馈确认", **fields,
+              level=logging.INFO if result["result"] == "completed" else logging.WARNING,
+              elapsed_wall_s=round(time.monotonic()-started, 6), **result)
+        return result
+
+    def _run_program_impl(self, command):
         # Files prevent an executor's output from filling pipes or memory.
         with tempfile.TemporaryFile() as stdin, tempfile.TemporaryFile() as stdout, tempfile.TemporaryFile() as stderr:
             stdin.write(json.dumps(command, ensure_ascii=False).encode()); stdin.seek(0)
@@ -104,6 +130,11 @@ class ExecutionWorker:
                 proc.wait()
                 return {"result": "failed", "detail": "executor stopped after local timeout"}
             stdout.seek(0)
+            stderr.seek(0)
+            diagnostic = stderr.read(8193)
+            if diagnostic:
+                event(LOG, "executor_stderr", "执行程序诊断输出", command_id=command["command_id"],
+                      text=diagnostic[:8192].decode("utf-8", errors="replace"), truncated=len(diagnostic)>8192)
             output = stdout.read(65537)
             if proc.returncode or len(output) > 65536:
                 stderr.seek(0)
@@ -115,6 +146,10 @@ class ExecutionWorker:
                 if result.get("result") not in {"completed", "failed", "cancelled"}:
                     raise ValueError("executor must return a terminal result")
                 fields = {"result": result["result"]}
+                if "detail" in result:
+                    if not isinstance(result["detail"], str) or len(result["detail"]) > 1000:
+                        raise ValueError("invalid executor detail")
+                    fields["detail"] = result["detail"]
                 if "execution_energy_used" in result:
                     fields["execution_energy_used"] = number(result["execution_energy_used"], "execution_energy_used")
                 if "outputs" in result:
@@ -129,9 +164,17 @@ class ExecutionWorker:
                 return {"result": "failed", "detail": "invalid executor JSON output"}
 
     def run_forever(self):
+        event(LOG, "worker_started", "执行端启动，等待指令", uav_id=self.uav_id,
+              worker_id=self.worker_id, resources=list(self.executors), url=self.client.url)
         try:
             while True:
-                self.run_once()
+                try:
+                    self.run_once()
+                except (ConnectionError, ValueError) as exc:
+                    # Recorded jobs and pending results remain durable; never invent success.
+                    limited_event(LOG, "worker_request_failed", "领取或反馈失败，将保留记录并重试",
+                                  key=(self.worker_id, str(exc)), level=logging.WARNING,
+                                  uav_id=self.uav_id, worker_id=self.worker_id, error=str(exc))
                 time.sleep(0.2)
         except KeyboardInterrupt:
-            pass
+            event(LOG, "worker_stopped", "执行端停止", uav_id=self.uav_id, worker_id=self.worker_id)

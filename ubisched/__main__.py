@@ -22,6 +22,7 @@ def main(argv=None):
     serve.add_argument("--checkpoint", type=Path)
     serve.add_argument("--auto-schedule", action="store_true", help="初始化后自动规划、提交，并检查超时")
     serve.add_argument("--command-timeout", type=float, default=30)
+    serve.add_argument("--log-dir", type=Path, help="日志目录，默认 logs/ubisched，也可设置 UBISCHED_LOG_DIR")
     rpc = commands.add_parser("request", help="发送初始化、规划、提交、遥测或反馈请求")
     rpc.add_argument("--input", required=True, type=Path, help="包含 operation/request_id 的 JSON 文件")
     rpc.add_argument("--url", default="http://127.0.0.1:18767/v2/rpc")
@@ -32,10 +33,15 @@ def main(argv=None):
     worker = commands.add_parser("worker", help="执行指定资源的本机程序并回报结果")
     worker.add_argument("--config", type=Path, required=True)
     worker.add_argument("--once", action="store_true")
+    worker.add_argument("--log-dir", type=Path, help="日志目录，默认 logs/ubisched")
     train = commands.add_parser("train", help="训练/正式实验入口，参数由训练脚本解释")
     train.add_argument("args", nargs=argparse.REMAINDER)
     args = parser.parse_args(argv)
     if args.command == "serve":
+        import logging
+        from ubisched.integration.event_log import configure_logging, event
+        configure_logging(args.log_dir, "server")
+        log = logging.getLogger("ubisched.server")
         from ubisched.integration.structured_bridge import ModelPolicy
         from ubisched.integration.runtime import RuntimeCoordinator
         from ubisched.integration.runtime_server import RuntimeServer
@@ -53,6 +59,9 @@ def main(argv=None):
                 if loop:
                     loop.start()
                 print(f"UbiSched v2 ready http://{args.host}:{args.port}/v2/rpc policy={args.policy}", flush=True)
+                event(log, "server_started", "服务已启动，等待初始化或恢复已有任务", url=f"http://{args.host}:{args.port}/v2/rpc",
+                      policy=args.policy, checkpoint=str(checkpoint) if checkpoint else None,
+                      database=str(args.database.resolve()), auto_schedule=args.auto_schedule)
                 try:
                     server.serve_forever(poll_interval=0.1)
                 except KeyboardInterrupt:
@@ -60,6 +69,7 @@ def main(argv=None):
                 finally:
                     if loop:
                         loop.stop()
+                    event(log, "server_stopped", "服务已停止")
         finally:
             coordinator.close()
         return 0
@@ -73,6 +83,8 @@ def main(argv=None):
         result = StructuredAdapter(ModelPolicy(args.policy, args.checkpoint)).decide(
             json.loads(args.snapshot.read_text(encoding="utf-8")))
     elif args.command == "worker":
+        from ubisched.integration.event_log import configure_logging
+        configure_logging(args.log_dir, args.config.stem)
         from ubisched.integration.worker import ExecutionWorker
         worker = ExecutionWorker.from_file(args.config)
         try:

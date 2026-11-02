@@ -1,0 +1,3 @@
+2026-11-02 15:54:55.999 INFO [ubisched] [logging_ready] 日志已启用 text_file="E:\\毕设\\UbiSched\\logs\\ubisched\\server.log" jsonl_file="E:\\毕设\\UbiSched\\logs\\ubisched\\server.jsonl"
+2026-11-02 15:54:58.026 INFO [ubisched.runtime] [waiting_initialize] 等待提交初始任务和资源 operation="schedule" command_id=null error="initialize a mission first"
+2026-11-02 15:54:58.026 INFO [ubisched.server] [server_started] 服务已启动，等待初始化或恢复已有任务 url="http://127.0.0.1:18767/v2/rpc" policy="mappo_dependency_transformer" checkpoint="E:\\毕设\\UbiSched\\models\\stage11_dependency_transformer_seed11.pt" database="E:\\毕设\\UbiSched\\.ubisched\\runtime.sqlite3" auto_schedule=true

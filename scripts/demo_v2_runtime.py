@@ -1,6 +1,8 @@
 """在临时目录演示新版服务、执行端、反馈及任务依赖。全部是离线示例。"""
 from pathlib import Path
+import argparse
 import json
+import logging
 import sys
 import tempfile
 import threading
@@ -13,17 +15,30 @@ from ubisched.integration.runtime import RuntimeCoordinator
 from ubisched.integration.runtime_server import RuntimeServer
 from ubisched.integration.structured_bridge import ModelPolicy
 from ubisched.integration.worker import ExecutionWorker
+from ubisched.integration.event_log import configure_logging, event
 
 
 def main():
+    parser = argparse.ArgumentParser(description="带逐条日志的离线流程演示，执行端始终为 mock")
+    parser.add_argument("--policy", default="greedy_score", choices=("greedy_score", "earliest_deadline",
+                        "mappo_mlp", "mappo_transformer", "mappo_dependency_transformer", "mappo_critical_path_transformer"))
+    parser.add_argument("--checkpoint", type=Path)
+    parser.add_argument("--log-dir", type=Path)
+    args = parser.parse_args()
+    configure_logging(args.log_dir, "demo")
+    checkpoint = args.checkpoint
+    if checkpoint is None and args.policy == "mappo_dependency_transformer":
+        checkpoint = ROOT/"models/stage11_dependency_transformer_seed11.pt"
+    event(logging.getLogger("ubisched.demo"), "mock_demo_started", "离线模拟演示，不控制 AirSim，不验证算法效果",
+          policy=args.policy, checkpoint=str(checkpoint) if checkpoint else None, executor="mock")
     with tempfile.TemporaryDirectory(prefix="ubisched_demo_") as folder:
         folder = Path(folder)
         # A fixed clock lets the example explicitly inject arrival events.
-        runtime = RuntimeCoordinator(ModelPolicy("greedy_score"), folder/"runtime.db", clock=lambda: 0)
+        runtime = RuntimeCoordinator(ModelPolicy(args.policy, checkpoint), folder/"runtime.db", clock=lambda: 0)
         with RuntimeServer(("127.0.0.1", 0), runtime) as server:
             thread = threading.Thread(target=server.serve_forever, daemon=True); thread.start()
             client = RuntimeClient(f"http://127.0.0.1:{server.server_port}/v2/rpc")
-            snapshot = json.loads((ROOT/"configs/ubisched/structured_snapshot_example.json").read_text())
+            snapshot = json.loads((ROOT/"configs/ubisched/structured_snapshot_example.json").read_text(encoding="utf-8"))
             workers = []
             try:
                 client.call("initialize", snapshot=snapshot)

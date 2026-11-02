@@ -1,6 +1,8 @@
 """服务内的可选自动调度循环。这里只提交指令，不代替执行器报告完成。"""
 import threading
 import uuid
+import logging
+from ubisched.integration.event_log import limited_event
 
 
 class SchedulerLoop:
@@ -27,5 +29,6 @@ class SchedulerLoop:
             except Exception as exc:
                 # Surface unexpected failures; never silently switch policies.
                 self.last_error = str(exc)
-                print(f"UbiSched scheduler error: {exc}", flush=True)
+                limited_event(logging.getLogger("ubisched.scheduler"), "scheduler_error", "调度循环发生异常",
+                              level=logging.ERROR, key=str(exc), error=str(exc))
             self.halt.wait(self.interval)
