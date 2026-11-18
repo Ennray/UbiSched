@@ -1,0 +1,10 @@
+{
+  "phase": "preflight",
+  "uav_id": "UAV1",
+  "sensor_index": 0,
+  "time": 1795000668.2435563,
+  "file": "E:\\毕设\\UbiSched\\airsim_connect\\outputs\\legacy_images\\37d206bd29f144c2b0a75693845ac008\\preflight\\UAV1\\0\\000000.png",
+  "bytes": 674197,
+  "width": 640,
+  "height": 640
+}

@@ -1,0 +1,28 @@
+2026-11-18 18:47:38.821 INFO [ubisched] [logging_ready] 日志已启用 text_file="E:\\毕设\\UbiSched\\logs\\ubisched\\legacy_tcp_UAV1.log" jsonl_file="E:\\毕设\\UbiSched\\logs\\ubisched\\legacy_tcp_UAV1.jsonl"
+2026-11-18 18:47:45.510 INFO [ubisched.legacy_network] [legacy_policy_ready] 当前图策略已加载，使用旧通信兼容模式，不使用 HTTP 18767 policy="mappo_dependency_transformer" attributes="configured_profile" task_count=5
+2026-11-18 18:47:45.511 INFO [ubisched.legacy_network] [legacy_tcp_connecting] 开发板连接电脑旧 TCP 服务 pc_ip="127.0.0.1" port=65432
+2026-11-18 18:47:45.513 INFO [ubisched.legacy_network] [legacy_tcp_connected] 旧 TCP 已连接 pc_ip="127.0.0.1" port=65432
+2026-11-18 18:47:45.517 INFO [ubisched.legacy_network] [legacy_wire_reply] 已按原 TCP 格式发送四位分配 observation="011110" reply="0111"
+2026-11-18 18:47:45.518 INFO [ubisched.legacy_network] [legacy_assignment_sent] 旧格式分配已发送，不代表 AirSim 已执行完成 correlation_key="28c62421fbd420d0" observation="011110" peer="('127.0.0.1', 65432)" uav_id="UAV1" task_index=0 sensor_index=1 match_score=0.29488
+2026-11-18 18:47:45.518 INFO [ubisched.legacy_network] [legacy_assignment_sent] 旧格式分配已发送，不代表 AirSim 已执行完成 correlation_key="e898e423152f9141" observation="011110" peer="('127.0.0.1', 65432)" uav_id="UAV2" task_index=1 sensor_index=1 match_score=0.29488
+2026-11-18 18:47:48.923 WARNING [ubisched.legacy_network] [legacy_connection_stopped] 旧连接结束或不满足旧格式约束，未切换其他算法 error="peer closed old TCP connection"
+2026-11-18 19:05:36.768 INFO [ubisched] [logging_ready] 日志已启用 text_file="E:\\毕设\\UbiSched\\logs\\ubisched\\legacy_tcp_UAV1.log" jsonl_file="E:\\毕设\\UbiSched\\logs\\ubisched\\legacy_tcp_UAV1.jsonl"
+2026-11-18 19:05:38.354 INFO [ubisched.legacy_network] [legacy_policy_ready] 当前图策略已加载，使用旧通信兼容模式，不使用 HTTP 18767 policy="mappo_dependency_transformer" attributes="configured_profile" task_count=5
+2026-11-18 19:05:38.355 INFO [ubisched.legacy_network] [legacy_tcp_connecting] 开发板连接电脑旧 TCP 服务 pc_ip="127.0.0.1" port=65432
+2026-11-18 19:05:38.356 INFO [ubisched.legacy_network] [legacy_tcp_connected] 旧 TCP 已连接 pc_ip="127.0.0.1" port=65432
+2026-11-18 19:05:38.362 INFO [ubisched.legacy_network] [legacy_wire_reply] 已按原 TCP 格式发送四位分配 observation="011110" reply="0111"
+2026-11-18 19:05:38.362 INFO [ubisched.legacy_network] [legacy_assignment_sent] 旧格式分配已发送，不代表 AirSim 已执行完成 correlation_key="28c62421fbd420d0" observation="011110" peer="('127.0.0.1', 65432)" uav_id="UAV1" task_index=0 sensor_index=1 match_score=0.29488
+2026-11-18 19:05:38.363 INFO [ubisched.legacy_network] [legacy_assignment_sent] 旧格式分配已发送，不代表 AirSim 已执行完成 correlation_key="e898e423152f9141" observation="011110" peer="('127.0.0.1', 65432)" uav_id="UAV2" task_index=1 sensor_index=1 match_score=0.29488
+2026-11-18 19:05:41.795 WARNING [ubisched.legacy_network] [legacy_connection_stopped] 旧连接结束或不满足旧格式约束，未切换其他算法 error="peer closed old TCP connection"
+2026-11-18 19:17:53.665 INFO [ubisched] [logging_ready] 日志已启用 text_file="E:\\毕设\\UbiSched\\logs\\ubisched\\legacy_tcp_UAV1.log" jsonl_file="E:\\毕设\\UbiSched\\logs\\ubisched\\legacy_tcp_UAV1.jsonl"
+2026-11-18 19:17:55.242 INFO [ubisched.legacy_network] [legacy_policy_ready] 当前图策略已加载，使用旧通信兼容模式，不使用 HTTP 18767 policy="mappo_dependency_transformer" attributes="configured_profile" task_count=5
+2026-11-18 19:17:55.242 INFO [ubisched.legacy_network] [legacy_tcp_connecting] 开发板连接电脑旧 TCP 服务 pc_ip="127.0.0.1" port=65432
+2026-11-18 19:17:55.244 INFO [ubisched.legacy_network] [legacy_tcp_connected] 旧 TCP 已连接 pc_ip="127.0.0.1" port=65432
+2026-11-18 19:17:55.250 INFO [ubisched.legacy_network] [legacy_wire_reply] 已按原 TCP 格式发送四位分配 observation="011110" reply="0111"
+2026-11-18 19:17:55.250 INFO [ubisched.legacy_network] [legacy_assignment_sent] 旧格式分配已发送，不代表 AirSim 已执行完成 correlation_key="28c62421fbd420d0" observation="011110" peer="('127.0.0.1', 65432)" uav_id="UAV1" task_index=0 sensor_index=1 match_score=0.29488
+2026-11-18 19:17:55.250 INFO [ubisched.legacy_network] [legacy_assignment_sent] 旧格式分配已发送，不代表 AirSim 已执行完成 correlation_key="e898e423152f9141" observation="011110" peer="('127.0.0.1', 65432)" uav_id="UAV2" task_index=1 sensor_index=1 match_score=0.29488
+2026-11-18 19:21:35.403 INFO [ubisched.legacy_network] [legacy_batch_reported] 收到旧协议的上一批完成标记，非逐条 v2 完成确认 previous_observation="011110" observation="300110" tasks=[0, 1]
+2026-11-18 19:21:35.409 INFO [ubisched.legacy_network] [legacy_wire_reply] 已按原 TCP 格式发送四位分配 observation="300110" reply="2131"
+2026-11-18 19:21:35.409 INFO [ubisched.legacy_network] [legacy_assignment_sent] 旧格式分配已发送，不代表 AirSim 已执行完成 correlation_key="16e7c2ba86c0982a" observation="300110" peer="('127.0.0.1', 65432)" uav_id="UAV1" task_index=2 sensor_index=1 match_score=0.29488
+2026-11-18 19:21:35.409 INFO [ubisched.legacy_network] [legacy_assignment_sent] 旧格式分配已发送，不代表 AirSim 已执行完成 correlation_key="94a8cf110f76f141" observation="300110" peer="('127.0.0.1', 65432)" uav_id="UAV2" task_index=3 sensor_index=1 match_score=0.29488
+2026-11-18 19:22:05.490 WARNING [ubisched.legacy_network] [legacy_connection_stopped] 旧连接结束或不满足旧格式约束，未切换其他算法 error="peer closed old TCP connection"

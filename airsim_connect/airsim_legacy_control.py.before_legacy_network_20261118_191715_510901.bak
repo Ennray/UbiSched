@@ -1,0 +1,412 @@
+"""Two-UAV legacy TCP execution. PC listens, scheduler connects.
+
+Six ASCII request bytes, four ASCII reply bytes. Only successful two-UAV
+batches change the old completion marker/task mask. No HTTP client here.
+"""
+import argparse
+import hashlib
+import json
+import logging
+import math
+import queue
+import select
+import signal
+import socket
+import threading
+import time
+import uuid
+from pathlib import Path
+
+from airsim_event_log import configure_logging, event
+
+LOG = logging.getLogger("airsim.control")
+
+
+def correlation_key(observation, uav, task_index, sensor_index):
+    raw = f"tcp|{observation}|{uav}|{task_index}|{sensor_index}"
+    return hashlib.sha256(raw.encode("ascii")).hexdigest()[:16]
+
+
+def load_config(path):
+    config = json.loads(Path(path).read_text(encoding="utf-8-sig"))
+    if config.get("vehicles") != ["UAV1", "UAV2"]:
+        raise ValueError("旧 TCP 两个动作槽固定对应 UAV1、UAV2")
+    if config.get("active_tasks") not in (2, 4) or len(config.get("routes", [])) != 5:
+        raise ValueError("旧六位状态要求五项航线配置，本次只启用前 2 或 4 项")
+    for route in config["routes"]:
+        if not route or any(len(p) != 3 or any(type(x) not in (int, float) or not math.isfinite(x) for x in p) for p in route):
+            raise ValueError("航点必须是有限的 NED 三维坐标")
+    for key in ("speed", "position_tolerance_m", "waypoint_timeout_s", "setup_timeout_s", "reply_timeout_s", "image_interval_s", "image_rpc_timeout_s"):
+        value = config.get(key)
+        if type(value) not in (int, float) or not math.isfinite(value) or value <= 0:
+            raise ValueError(f"配置 {key} 必须是正数")
+    if type(config.get("port")) is not int or not 1 <= config["port"] <= 65535:
+        raise ValueError("TCP 端口无效")
+    if type(config.get("takeoff_z")) not in (int, float) or not math.isfinite(config["takeoff_z"]) or config["takeoff_z"] >= 0:
+        raise ValueError("takeoff_z 必须为负的 NED 高度")
+    if config.get("forward_images") and not config.get("image_server_ip"):
+        raise ValueError("启用旧图像转发时必须填写 image_server_ip")
+    for key in ("log_dir", "image_dir"):
+        p = Path(config[key])
+        config[key] = str(p if p.is_absolute() else Path(path).resolve().parent / p)
+    return config
+
+
+def recv_exact(conn, size, stop, timeout):
+    """Keep partial bytes; never resend a request after a short timeout."""
+    deadline, data = time.monotonic() + timeout, bytearray()
+    while len(data) < size:
+        if stop.is_set():
+            raise InterruptedError("用户停止运行")
+        if time.monotonic() >= deadline:
+            raise TimeoutError("等待完整旧格式分配超时，未重新执行任务")
+        try:
+            chunk = conn.recv(size - len(data))
+        except socket.timeout:
+            continue
+        if not chunk:
+            raise ConnectionError("调度端断开，停止当前实验")
+        data.extend(chunk)
+    return bytes(data)
+
+
+def decode_reply(raw, observation, active):
+    if len(raw) != 4 or any(c < 48 or c > 57 for c in raw):
+        raise ValueError("旧分配必须为四位 ASCII 数字")
+    a, b, c, d = [x - 48 for x in raw]
+    if a == c or any(t >= active or observation[t + 1] != "1" for t in (a, c)):
+        raise ValueError("分配包含重复、未启用或已完成任务")
+    if b not in (0, 1) or d not in (0, 1):
+        raise ValueError("本次配置只支持传感器 0 RGB、1 红外")
+    return [("UAV1", a, b), ("UAV2", c, d)]
+
+
+def position(client, uav):
+    p = client.getMultirotorState(vehicle_name=uav).kinematics_estimated.position
+    result = [p.x_val, p.y_val, p.z_val]
+    if not all(math.isfinite(x) for x in result):
+        raise RuntimeError(f"{uav} 位置无效")
+    return result
+
+
+def verify_arrival(client, uav, target, tolerance):
+    actual = position(client, uav)
+    error = math.sqrt(sum((a - b) ** 2 for a, b in zip(actual, target)))
+    if client.simGetCollisionInfo(vehicle_name=uav).has_collided:
+        raise RuntimeError(f"{uav} 检测到碰撞")
+    if error > tolerance:
+        raise RuntimeError(f"{uav} 未到达目标，误差 {error:.2f} 米，容差 {tolerance:.2f} 米")
+    return actual, error
+
+
+def wait_motion(future, stop):
+    # msgpack Future.join may discard the boolean result; get exposes it.
+    getter = getattr(future, "get", None)
+    result = getter() if callable(getter) else future.join()
+    if result is False:
+        raise RuntimeError("AirSim 飞行调用返回失败")
+    if stop.is_set():
+        raise InterruptedError("本批任务中断")
+
+
+class Controller:
+    def __init__(self, config, api, stop=None):
+        self.config, self.api = config, api
+        self.stop = stop if stop is not None else threading.Event()
+        self.session_id = uuid.uuid4().hex
+        self.images = Path(config["image_dir"]) / self.session_id
+        self.images.mkdir(parents=True, exist_ok=True)
+        self.started, self.ready = set(), set()
+        self.started_lock = threading.Lock()
+        self.workers = []
+
+    def log(self, name, message, **fields):
+        event(LOG, name, message, session_id=self.session_id, **fields)
+
+    def client(self, timeout):
+        return self.api.MultirotorClient(ip=self.config.get("airsim_ip", "127.0.0.1"), timeout_value=timeout)
+
+    def flight_state(self, uav):
+        """Diagnostic reads use a short-lived client, never mask a flight error."""
+        try:
+            client = self.client(min(5, self.config["image_rpc_timeout_s"]))
+            state = client.getMultirotorState(vehicle_name=uav)
+            kin = state.kinematics_estimated
+            p, v = kin.position, getattr(kin, "linear_velocity", None)
+            landed = getattr(state, "landed_state", None)
+            collision = client.simGetCollisionInfo(vehicle_name=uav)
+            return {"position": [p.x_val, p.y_val, p.z_val],
+                    "velocity": [v.x_val, v.y_val, v.z_val] if v is not None else None,
+                    "landed_state": landed,
+                    "landed_state_name": {0: "Landed", 1: "Flying"}.get(landed, "unknown"),
+                    "api_control": client.isApiControlEnabled(vehicle_name=uav),
+                    "collision": bool(collision.has_collided),
+                    "ready": getattr(state, "ready", None),
+                    "ready_message": getattr(state, "ready_message", None),
+                    "timestamp": int(getattr(state, "timestamp", 0))}
+        except Exception as exc:
+            return {"state_read_error": str(exc)}
+
+    def motion(self, uav, action, start, target=None):
+        if self.stop.is_set():
+            raise InterruptedError(f"{uav} {action} 开始前实验已停止")
+        before = self.flight_state(uav)
+        self.log("flight_step_started", "开始飞行动作", uav_id=uav, action=action, target=target, state=before)
+        begin = time.monotonic()
+        try:
+            wait_motion(start(), self.stop)
+        except Exception as exc:
+            after = self.flight_state(uav)
+            self.log("flight_step_failed", "飞行动作失败，保留失败结果", uav_id=uav, action=action,
+                     elapsed_s=round(time.monotonic()-begin, 3), before=before, after=after, error=str(exc))
+            raise RuntimeError(f"{uav} {action} 失败: {exc}") from exc
+        self.log("flight_step_finished", "飞行调用返回，后续仍需检查实际到达", uav_id=uav, action=action,
+                 elapsed_s=round(time.monotonic()-begin, 3), state=self.flight_state(uav))
+
+    def capture(self, client, uav, sensor, directory, index, fields):
+        image_type = self.api.ImageType.Scene if sensor == 0 else self.api.ImageType.Infrared
+        responses = client.simGetImages([
+            self.api.ImageRequest(self.config["camera"], image_type, pixels_as_float=False, compress=True)
+        ], vehicle_name=uav)
+        if len(responses) != 1:
+            raise RuntimeError(f"{uav} 图像响应数量无效")
+        response = responses[0]
+        data = bytes(response.image_data_uint8)
+        if response.width <= 0 or response.height <= 0 or not data or not data.startswith(b"\x89PNG\r\n\x1a\n"):
+            raise RuntimeError(f"{uav} 未取得有效 PNG 图像，请检查相机 {self.config['camera']}")
+        directory.mkdir(parents=True, exist_ok=True)
+        path = directory / f"{index:06d}.png"
+        temporary = path.with_suffix(".part")
+        temporary.write_bytes(data)
+        temporary.replace(path)
+        metadata = {**fields, "uav_id": uav, "sensor_index": sensor,
+                    "time": time.time(), "file": str(path), "bytes": len(data),
+                    "width": response.width, "height": response.height}
+        path.with_suffix(".json").write_text(json.dumps(metadata, ensure_ascii=False, indent=2), encoding="utf-8")
+        self.log("image_saved", "图像已保存", **metadata)
+        if self.config.get("forward_images"):
+            with socket.create_connection((self.config["image_server_ip"], self.config.get("image_server_port", 8892)), timeout=5) as sock:
+                sock.sendall(len(data).to_bytes(4, "big") + data)
+            self.log("image_bytes_sent", "按旧格式发送图像字节，未确认远端识别结果", **fields, uav_id=uav, image_bytes=len(data))
+        return path
+
+    def preflight(self):
+        client = self.client(self.config["image_rpc_timeout_s"])
+        client.confirmConnection()
+        vehicles = client.listVehicles()
+        missing = set(self.config["vehicles"]) - set(vehicles)
+        if missing:
+            raise RuntimeError(f"UE 中缺少无人机 {sorted(missing)}，当前为 {vehicles}")
+        for uav in self.config["vehicles"]:
+            position(client, uav)
+            if client.simGetCollisionInfo(vehicle_name=uav).has_collided:
+                raise RuntimeError(f"{uav} 启动前已经碰撞，请重置场景")
+            for sensor in (0, 1):
+                self.capture(client, uav, sensor, self.images / "preflight" / uav / str(sensor), 0, {"phase": "preflight"})
+        self.log("preflight_ok", "两架 UAV 及 RGB、红外相机检查通过；本检查不执行起飞", vehicles=vehicles)
+
+    def setup(self, client, uav):
+        if self.stop.is_set():
+            raise InterruptedError("起飞前实验已停止")
+        self.log("uav_setup_started", "开始起飞准备，先读取当前飞行状态", uav_id=uav, state=self.flight_state(uav))
+        client.enableApiControl(True, vehicle_name=uav)
+        with self.started_lock:
+            self.started.add(uav)
+        if self.stop.is_set():
+            client.cancelLastTask(vehicle_name=uav)
+            raise InterruptedError("取得控制后实验已停止")
+        if not client.isApiControlEnabled(vehicle_name=uav):
+            raise RuntimeError(f"{uav} 无法取得 API 控制")
+        armed = client.armDisarm(True, vehicle_name=uav)
+        self.log("uav_arm_result", "记录解锁调用结果", uav_id=uav, result=armed, state=self.flight_state(uav))
+        if armed is False:
+            raise RuntimeError(f"{uav} 解锁失败")
+        timeout = self.config["setup_timeout_s"]
+        landed_state = getattr(client.getMultirotorState(vehicle_name=uav), "landed_state", None)
+        if landed_state == self.api.LandedState.Landed:
+            self.motion(uav, "takeoffAsync", lambda: client.takeoffAsync(timeout_sec=timeout, vehicle_name=uav))
+        elif landed_state == self.api.LandedState.Flying:
+            self.log("takeoff_skipped_airborne", "当前已处于 Flying，跳过重复起飞，继续检查目标高度", uav_id=uav, state=self.flight_state(uav))
+        else:
+            raise RuntimeError(f"{uav} 无法判断 landed_state={landed_state}，未尝试起飞")
+        self.motion(uav, "moveToZAsync", lambda: client.moveToZAsync(self.config["takeoff_z"], 2, timeout_sec=timeout, vehicle_name=uav), target=[None, None, self.config["takeoff_z"]])
+        actual = position(client, uav)
+        verify_arrival(client, uav, [actual[0], actual[1], self.config["takeoff_z"]], self.config["position_tolerance_m"])
+        self.log("uav_ready", "无人机起飞及高度检查通过", uav_id=uav, position=actual)
+
+    def run_vehicle(self, uav, task_index, sensor, observation, batch_index):
+        cfg = self.config
+        fields = {"batch_index": batch_index, "task_index": task_index,
+                  "correlation_key": correlation_key(observation, uav, task_index, sensor), "observation": observation}
+        client = self.client(max(cfg["waypoint_timeout_s"], cfg["setup_timeout_s"]) + 10)
+        if uav not in self.ready:
+            self.setup(client, uav)
+        image_stop, image_ready = threading.Event(), threading.Event()
+        image_errors, count = [], [0]
+        directory = self.images / f"batch_{batch_index:02d}" / f"{uav}_task{task_index}_sensor{sensor}"
+
+        def image_loop():
+            try:
+                image_client = self.client(cfg["image_rpc_timeout_s"])
+                while not self.stop.is_set() and not image_stop.is_set():
+                    self.capture(image_client, uav, sensor, directory, count[0], fields)
+                    count[0] += 1
+                    image_ready.set()
+                    if image_stop.wait(cfg["image_interval_s"]):
+                        break
+            except Exception as exc:
+                image_errors.append(exc)
+                self.log("image_capture_failed", "图像处理失败，本批不报告成功", **fields, uav_id=uav, error=str(exc))
+                self.stop.set()
+            finally:
+                image_ready.set()
+
+        thread = threading.Thread(target=image_loop, name=f"images-{uav}", daemon=True)
+        self.log("route_started", "开始执行旧接口下发航线", **fields, uav_id=uav, sensor_index=sensor)
+        thread.start()
+        try:
+            if not image_ready.wait(cfg["image_rpc_timeout_s"] + 6):
+                raise TimeoutError(f"{uav} 图像采集初始化超时")
+            if image_errors:
+                raise image_errors[0]
+            for index, target in enumerate(cfg["routes"][task_index]):
+                if self.stop.is_set():
+                    raise InterruptedError("任务停止，未报告完成")
+                self.log("waypoint_started", "开始前往航点", **fields, uav_id=uav, waypoint=index, target=target)
+                self.motion(uav, "moveToPositionAsync", lambda: client.moveToPositionAsync(*target, cfg["speed"], timeout_sec=cfg["waypoint_timeout_s"], vehicle_name=uav), target=target)
+                actual, error = verify_arrival(client, uav, target, cfg["position_tolerance_m"])
+                self.log("waypoint_completed", "已核对航点位置及碰撞状态", **fields, uav_id=uav, waypoint=index, position=actual, error_m=error)
+        finally:
+            image_stop.set()
+            thread.join(cfg["image_rpc_timeout_s"] + 6)
+        if thread.is_alive():
+            raise TimeoutError(f"{uav} 图像线程未结束")
+        if image_errors:
+            raise image_errors[0]
+        if self.stop.is_set():
+            raise InterruptedError("实验已停止，未报告完成")
+        self.capture(self.client(cfg["image_rpc_timeout_s"]), uav, sensor, directory, count[0], fields)
+        self.log("route_completed", "航线到达检查及本地图像保存通过", **fields, uav_id=uav, image_count=count[0] + 1)
+
+    def run_batch(self, choices, observation, batch_index, conn):
+        results = queue.Queue()
+
+        def worker(choice):
+            try:
+                self.run_vehicle(*choice, observation, batch_index)
+                results.put((choice[0], None))
+            except Exception as exc:
+                self.stop.set()
+                results.put((choice[0], exc))
+
+        for choice in choices:
+            thread = threading.Thread(target=worker, args=(choice,), name=f"flight-{choice[0]}", daemon=True)
+            self.workers.append(thread)
+            thread.start()
+        finished = set()
+        while len(finished) < 2:
+            try:
+                uav, error = results.get(timeout=0.1)
+            except queue.Empty:
+                if self.stop.is_set():
+                    raise InterruptedError("本批任务中断，未报告完成")
+                readable, _, _ = select.select([conn], [], [], 0)
+                if readable and not conn.recv(1, socket.MSG_PEEK):
+                    raise ConnectionError("执行中调度端断开，未报告完成")
+                continue
+            if error is not None:
+                raise RuntimeError(f"{uav} 执行失败: {error}") from error
+            finished.add(uav)
+        self.ready.update(finished)
+
+    def cleanup(self):
+        self.stop.set()
+        with self.started_lock:
+            vehicles = list(self.started)
+        for uav in vehicles:
+            try:
+                client = self.client(5)
+                client.cancelLastTask(vehicle_name=uav)
+                client.hoverAsync(vehicle_name=uav).join()
+                self.log("uav_hovering", "已取消剩余动作并请求悬停，可在 UE 停止仿真", uav_id=uav)
+            except Exception as exc:
+                self.log("cleanup_failed", "停止飞行请求失败，请在 UE 停止仿真", uav_id=uav, error=str(exc))
+        for thread in self.workers:
+            thread.join(1)
+            if thread.is_alive():
+                self.log("worker_still_stopping", "执行线程仍在等待 RPC 结束，请在 UE 停止仿真", worker=thread.name)
+
+    def run(self, check_only=False):
+        configure_logging(self.config["log_dir"], "airsim")
+        self.log("control_started", "旧 Socket 控制启动，任务仅由调度端分配", policy_source="legacy_socket", image_dir=str(self.images), forward_images=self.config.get("forward_images", False))
+        success = False
+        try:
+            self.preflight()
+            if check_only:
+                return 0
+            cfg = self.config
+            with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as server:
+                server.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+                server.bind((cfg["host"], cfg["port"]))
+                server.listen(1)
+                server.settimeout(0.5)
+                self.log("legacy_tcp_listening", "电脑已监听，等待同机或开发板上的 UbiSched 连接", host=cfg["host"], port=cfg["port"])
+                while not self.stop.is_set():
+                    try:
+                        conn, peer = server.accept()
+                        break
+                    except socket.timeout:
+                        continue
+                else:
+                    raise InterruptedError("停止等待连接")
+                with conn:
+                    conn.settimeout(0.5)
+                    self.log("legacy_tcp_connected", "调度端已连接", peer=list(peer))
+                    observation = "0" + "1" * cfg["active_tasks"] + "0" * (5 - cfg["active_tasks"])
+                    batch_index = 0
+                    while "1" in observation[1:]:
+                        conn.sendall(observation.encode("ascii"))
+                        self.log("legacy_state_sent", "发送原六位任务状态", observation=observation)
+                        raw = recv_exact(conn, 4, self.stop, cfg["reply_timeout_s"])
+                        choices = decode_reply(raw, observation, cfg["active_tasks"])
+                        for uav, task_index, sensor in choices:
+                            self.log("legacy_assignment_received", "收到旧四位分配", reply=raw.decode(), observation=observation, uav_id=uav, task_index=task_index, sensor_index=sensor, correlation_key=correlation_key(observation, uav, task_index, sensor))
+                        self.run_batch(choices, observation, batch_index, conn)
+                        chars = list(observation)
+                        for _, task_index, _ in choices:
+                            chars[task_index + 1] = "0"
+                        chars[0] = str(3 - int(chars[0]))
+                        observation = "".join(chars)
+                        self.log("legacy_batch_finished", "两架 UAV 均通过执行检查，准备发送旧批次完成标记", batch_index=batch_index, observation=observation)
+                        batch_index += 1
+                    conn.sendall(observation.encode("ascii"))
+                    self.log("legacy_session_finished", "启用任务全部完成，旧结束状态已发送；其余任务未执行", observation=observation, completed_task_indices=list(range(cfg["active_tasks"])), unexecuted_task_indices=list(range(cfg["active_tasks"], 5)))
+                    success = True
+            return 0
+        except Exception as exc:
+            event(LOG, "experiment_failed", "实验未通过，未发送成功结束状态", level=logging.ERROR, session_id=self.session_id, error=str(exc))
+            return 1
+        finally:
+            self.cleanup()
+            self.log("control_stopped", "控制程序已结束", success=success if not check_only else None)
+
+
+def main(default_config, argv=None):
+    parser = argparse.ArgumentParser(description="旧 TCP AirSim 仿真，不需要开发板，不使用 HTTP")
+    parser.add_argument("--config", type=Path, default=default_config)
+    parser.add_argument("--check", action="store_true", help="只检查 UE、UAV 和相机，不起飞、不等待调度端")
+    args = parser.parse_args(argv)
+    try:
+        config = load_config(args.config)
+        import airsim
+    except Exception as exc:
+        print(f"启动失败: {exc}")
+        print("请在原 AirSim Python 环境运行，并检查同目录配置文件。")
+        return 1
+    controller = Controller(config, airsim)
+    def stop(signum, frame):
+        controller.stop.set()
+    for name in ("SIGINT", "SIGTERM"):
+        if hasattr(signal, name):
+            signal.signal(getattr(signal, name), stop)
+    return controller.run(args.check)
