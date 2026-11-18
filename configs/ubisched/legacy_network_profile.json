@@ -1,0 +1,25 @@
+{
+  "notice": "Compatibility configuration, not measured live sensor attributes. Old wire format unchanged.",
+  "task_count": 5,
+  "sensors": [
+    {
+      "legacy_sensor_index": 0,
+      "modality": "rgb",
+      "quality": 0.85,
+      "power": 1.0,
+      "remaining_energy": 100.0
+    },
+    {
+      "legacy_sensor_index": 1,
+      "modality": "infrared",
+      "quality": 0.8,
+      "power": 1.0,
+      "remaining_energy": 100.0
+    }
+  ],
+  "priority_by_task": {},
+  "required_modalities_any": [
+    "rgb",
+    "infrared"
+  ]
+}
