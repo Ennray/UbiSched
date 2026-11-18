@@ -1,0 +1,13 @@
+{
+  "batch_index": 1,
+  "task_index": 2,
+  "correlation_key": "16e7c2ba86c0982a",
+  "observation": "300110",
+  "uav_id": "UAV1",
+  "sensor_index": 1,
+  "time": 1795002977.7663817,
+  "file": "E:\\毕设\\UbiSched\\airsim_connect\\outputs\\legacy_images\\f26714d8af024762843f36d1fef08bd3\\batch_01\\UAV1_task2_sensor1\\000022.png",
+  "bytes": 16514,
+  "width": 640,
+  "height": 640
+}
